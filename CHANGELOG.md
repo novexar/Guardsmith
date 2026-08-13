@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.3.1 (2026-08-13)
+
+### Added
+
+- `@guardsmith/core` 0.2.2: ポリシー `target` に `power-platform` を追加
+  (Power Platform ガバナンス監査 CLI「Tenavis」がエンジンとして @guardsmith/core を利用するため)
+
 ## v0.3.0 (2026-08-13)
 
 ### Changed

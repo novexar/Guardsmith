@@ -22,7 +22,8 @@ export type Severity = z.infer<typeof Severity>;
 
 export const Target = z.enum([
   "claude-code",
-  // 予約: "cursor", "codex", "power-platform"
+  "power-platform",
+  // 予約: "cursor", "codex"
 ]);
 export type Target = z.infer<typeof Target>;
 
