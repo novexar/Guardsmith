@@ -1,0 +1,91 @@
+# GuardSmith self-preset — guardsmith リポジトリ自身を検査するルールセット
+# baseline.yaml は「standards/ テンプレートから生成された PJ」向けのため、
+# ツール本体である本リポジトリには適用ルールを調整した本 preset を使う。
+# 注意: standards/ は配布マスターであり {{PLACEHOLDER}} / gen: コメントを含むのが正。
+#       プレースホルダ検査の対象に standards/ を含めないこと。
+version: 1
+target: claude-code
+rules:
+  - id: structure/required-layout
+    severity: error
+    description: リポジトリ必須構成(CLAUDE.md / LICENSE / core / presets / standards)が存在すること
+    check: file-exists
+    with:
+      paths:
+        - CLAUDE.md
+        - LICENSE
+        - CONTRIBUTING.md
+        - README.md
+        - guard.policy.yaml
+        - presets/baseline.yaml
+        - packages/core/src/
+        - packages/core/test/
+        - standards/CLAUDE.md
+        - docs/LAYERING.md
+
+  - id: claude-md/initialized
+    severity: error
+    description: ルートCLAUDE.mdにプレースホルダ・生成指示コメントが残っていないこと
+    check: content-match
+    with:
+      path: CLAUDE.md
+      must_not:
+        - '\{\{.*\}\}'
+        - "未初期化テンプレート"
+        - "<!-- gen:"
+
+  - id: claude-md/contract-headings
+    severity: error
+    description: agents/skillsが参照する契約見出しが維持されていること
+    check: content-match
+    with:
+      path: CLAUDE.md
+      must:
+        - "^## 技術スタック"
+        - "^## よく使うコマンド"
+        - "^## ブランチ戦略"
+        - "^## PJ固有ルール"
+
+  - id: claude-md/thin-diff
+    severity: warn
+    description: CLAUDE.mdの肥大化検知(詳細はdocs/へ)
+    check: max-lines
+    with: { path: CLAUDE.md, limit: 120 }
+
+  - id: claude-md/standards-version
+    severity: warn
+    description: 末尾のstandardsバージョンコメントが維持されていること
+    check: content-match
+    with:
+      path: CLAUDE.md
+      must:
+        - "<!-- standards: novexar/(claude-standards|guardsmith) v"
+
+  - id: security/no-secrets-in-context
+    severity: error
+    description: ドキュメント・設定・標準テンプレートへの資格情報混入禁止
+    check: secret-scan
+    with:
+      paths:
+        - CLAUDE.md
+        - README.md
+        - CONTRIBUTING.md
+        - ".claude/**"
+        - "docs/**"
+        - "presets/**"
+        - "standards/**"
+
+  - id: security/dangerous-permissions
+    severity: error
+    description: settings.jsonの危険なpermission許可の禁止
+    check: json-path
+    with:
+      path: .claude/settings.json
+      assert:
+        - { query: "$.permissions.allow[*]", op: not-matches, value: 'rm -rf|curl .*\|.*sh' }
+
+  - id: hygiene/no-env-file
+    severity: error
+    description: .envファイルのコミット禁止(秘密情報は環境変数管理)
+    check: file-absent
+    with: { paths: [".env"] }

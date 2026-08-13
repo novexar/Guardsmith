@@ -1,0 +1,6 @@
+# standards/ は配布マスター。整形による内容変更は drift 検知の比較元を壊すため除外
+standards/
+node_modules/
+coverage/
+dist/
+pnpm-lock.yaml

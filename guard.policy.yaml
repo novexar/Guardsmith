@@ -1,0 +1,8 @@
+version: 1
+target: claude-code
+extends:
+  - preset:self
+rules: []
+exemptions: []
+output:
+  formats: [console]

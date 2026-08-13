@@ -1,0 +1,138 @@
+name: "GuardSmith Lint"
+description: >-
+  Machine-verify AI development standards (CLAUDE.md / agents / skills) with
+  guard lint — SARIF report upload and a PR comment when violations are found.
+author: "Novexar"
+branding:
+  icon: "shield"
+  color: "purple"
+
+inputs:
+  guardsmith-ref:
+    description: "novexar/Guardsmith ref (tag) providing the guard CLI"
+    required: false
+    default: "v0.2.1"
+  guardsmith-token:
+    description: >-
+      Token that can read novexar/Guardsmith and remote policy/standards repos
+      (github: refs). Defaults to github.token, which is enough once GuardSmith
+      is public; pass a PAT while it is private.
+    required: false
+    default: ${{ github.token }}
+  github-token:
+    description: "Token used to post the PR comment (needs pull-requests: write)"
+    required: false
+    default: ${{ github.token }}
+  root:
+    description: "Directory to lint, relative to the workspace"
+    required: false
+    default: "."
+  policy:
+    description: "Policy file, relative to root"
+    required: false
+    default: "guard.policy.yaml"
+  upload-sarif:
+    description: >-
+      Upload the SARIF report to GitHub Code Scanning (requires a public repo
+      or GitHub Advanced Security). Set to 'false' on private repos without GHAS.
+    required: false
+    default: "true"
+  pr-comment:
+    description: "Post a summary comment on the PR when lint fails"
+    required: false
+    default: "true"
+
+outputs:
+  exit-code:
+    description: "guard lint exit code (0 = pass, 1 = errors found)"
+    value: ${{ steps.lint.outputs.exit-code }}
+  sarif-file:
+    description: "Path to the generated SARIF report in the workspace"
+    value: "guardsmith.sarif"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout GuardSmith CLI
+      uses: actions/checkout@v4
+      with:
+        repository: novexar/Guardsmith
+        ref: ${{ inputs.guardsmith-ref }}
+        token: ${{ inputs.guardsmith-token }}
+        path: .guardsmith-cli
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 10
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 24
+
+    - name: Install GuardSmith
+      shell: bash
+      run: pnpm --dir "$GITHUB_WORKSPACE/.guardsmith-cli" install --frozen-lockfile
+
+    - name: Run guard lint
+      id: lint
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.guardsmith-token }}
+        LINT_ROOT: ${{ inputs.root }}
+        LINT_POLICY: ${{ inputs.policy }}
+      run: |
+        set +e
+        cli="$GITHUB_WORKSPACE/.guardsmith-cli"
+        root="$GITHUB_WORKSPACE/$LINT_ROOT"
+        pnpm --dir "$cli" exec tsx packages/core/src/cli.ts lint \
+          --root "$root" --policy "$LINT_POLICY" | tee "$GITHUB_WORKSPACE/guardsmith-report.txt"
+        code=${PIPESTATUS[0]}
+        pnpm --dir "$cli" exec tsx packages/core/src/cli.ts lint \
+          --root "$root" --policy "$LINT_POLICY" \
+          --format sarif --out "$GITHUB_WORKSPACE/guardsmith.sarif" > /dev/null
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        {
+          echo "## 🛡️ GuardSmith lint"
+          echo '```'
+          cat "$GITHUB_WORKSPACE/guardsmith-report.txt"
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+        exit 0
+
+    - name: Upload SARIF to Code Scanning
+      if: ${{ always() && inputs.upload-sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: guardsmith.sarif
+
+    - name: Upload SARIF artifact
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: guardsmith-sarif
+        path: guardsmith.sarif
+
+    - name: Comment on PR
+      if: ${{ inputs.pr-comment == 'true' && github.event_name == 'pull_request' && steps.lint.outputs.exit-code != '0' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        {
+          echo "### 🛡️ GuardSmith lint failed"
+          echo
+          echo '```'
+          tail -n 40 "$GITHUB_WORKSPACE/guardsmith-report.txt"
+          echo '```'
+          echo
+          echo "_Fix the findings above, or add a time-boxed exemption in \`guard.policy.yaml\` (expires + approved_by required)._"
+        } > "$GITHUB_WORKSPACE/guardsmith-comment.md"
+        gh pr comment "${{ github.event.pull_request.number }}" \
+          --repo "${{ github.repository }}" \
+          --body-file "$GITHUB_WORKSPACE/guardsmith-comment.md"
+
+    - name: Fail on lint errors
+      shell: bash
+      run: exit ${{ steps.lint.outputs.exit-code }}

@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+*.log
+report.sarif
+*.tgz
+# prepack が同梱するアセットコピー(マスターはリポジトリルート)
+packages/core/presets/
+packages/core/standards/
+.DS_Store

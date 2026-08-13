@@ -1,0 +1,24 @@
+{
+  "name": "@guardsmith/cli",
+  "version": "0.2.1",
+  "description": "GuardSmith CLI — the guard binary (init / lint / sync / new / explain)",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/novexar/Guardsmith.git",
+    "directory": "packages/cli"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "guard": "./bin/guard.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "dependencies": {
+    "@guardsmith/core": "workspace:^"
+  }
+}

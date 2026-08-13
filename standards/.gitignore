@@ -1,0 +1,12 @@
+node_modules/
+dist/
+__pycache__/
+*.pyc
+.venv/
+.env
+.env.*
+!.env.example
+coverage/
+.claude/settings.local.json
+.claude/worktrees/
+.DS_Store

@@ -1,0 +1,116 @@
+# GuardSmith baseline — novexar/claude-standards の規約を機械判定化したルールセット
+# 対象: claude-standards テンプレートから生成されたプロジェクトリポジトリ
+version: 1
+target: claude-code
+rules:
+  # --- 標準構成の存在保証 ---
+  - id: structure/required-layout
+    severity: error
+    description: 標準リポジトリ構成(CLAUDE.md / agents / skills / docs)が存在すること
+    check: file-exists
+    with:
+      paths:
+        - CLAUDE.md
+        - .claude/agents/*.md
+        - .claude/skills/start-task/SKILL.md
+        - .claude/skills/finish-task/SKILL.md
+        - docs/
+
+  # --- 初期化完了の検証 (init-project の完了条件) ---
+  - id: claude-md/initialized
+    severity: error
+    description: 未初期化テンプレートのまま運用されていないこと(プレースホルダ・警告ブロック・gen:コメントの残存禁止)
+    check: content-match
+    with:
+      path: CLAUDE.md
+      must_not:
+        - '\{\{.*\}\}'
+        - "未初期化テンプレート"
+        - "<!-- gen:"
+
+  - id: agents/no-template-placeholder
+    severity: error
+    description: agent雛形が具体化されていること(プレースホルダ・gen:コメントの残存禁止)
+    check: content-match
+    with:
+      path: .claude/agents/*.md
+      must_not:
+        - '\{\{.*\}\}'
+        - "<!-- gen:"
+
+  # --- CLAUDE.md 契約見出し (agents/skills が参照するコントラクト。改名・削除禁止) ---
+  - id: claude-md/contract-headings
+    severity: error
+    description: agents/skillsが参照する契約見出しが維持されていること
+    check: content-match
+    with:
+      path: CLAUDE.md
+      must:
+        - "^## 技術スタック"
+        - "^## よく使うコマンド"
+        - "^## ブランチ戦略"
+        - "^## PJ固有ルール"
+
+  # --- 薄い差分原則 (完成版は120行以内目安) ---
+  - id: claude-md/thin-diff
+    severity: warn
+    description: CLAUDE.mdの肥大化検知(詳細はdocs/へ)
+    check: max-lines
+    with: { path: CLAUDE.md, limit: 120 }
+
+  # --- standards バージョントレーサビリティ ---
+  - id: claude-md/standards-version
+    severity: warn
+    description: 末尾のstandardsバージョンコメントが維持されていること(どの標準版から生成されたかの追跡)
+    check: content-match
+    with:
+      path: CLAUDE.md
+      must:
+        - "<!-- standards: novexar/(claude-standards|guardsmith) v"
+
+  # --- agents frontmatter ---
+  - id: agents/frontmatter
+    severity: error
+    description: agentのfrontmatter必須キー(name/description/tools)
+    check: frontmatter
+    with:
+      paths: [.claude/agents/*.md]
+      required: [name, description, tools]
+      schema: { name: "^[a-z][a-z0-9-]*$" }
+
+  # --- skills frontmatter ---
+  - id: skills/frontmatter
+    severity: error
+    description: skillのfrontmatter必須キー(name/description)
+    check: frontmatter
+    with:
+      paths: [".claude/skills/*/SKILL.md"]
+      required: [name, description]
+
+  # --- 標準skills本体のマスター乖離検知 ---
+  - id: drift/skills-sync
+    severity: warn
+    description: 標準skillsがマスター(standards/)から乖離していないこと
+    check: drift
+    with:
+      # マスターは guardsmith リポジトリの standards/ サブディレクトリ。
+      # loadPolicy がタグのtarballを取得・キャッシュし file: に解決してから検査する
+      source: github:novexar/guardsmith//standards@v0.2.1
+      paths: [".claude/skills/**"]
+      allow_sections: ["## PJ固有手順"]
+
+  # --- セキュリティ ---
+  - id: security/no-secrets-in-context
+    severity: error
+    description: CLAUDE.md・.claude配下への資格情報混入禁止
+    check: secret-scan
+    with: { paths: [CLAUDE.md, ".claude/**"] }
+
+  - id: security/dangerous-permissions
+    severity: error
+    description: settings.jsonの危険なpermission許可の禁止
+    check: json-path
+    with:
+      path: .claude/settings.json
+      assert:
+        - { query: "$.permissions.allow[*]", op: not-matches, value: 'rm -rf|curl .*\|.*sh' }
