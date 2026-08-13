@@ -1,7 +1,7 @@
 name: "GuardSmith Lint"
 description: >-
-  Machine-verify AI development standards (CLAUDE.md / agents / skills) with
-  guard lint — SARIF report upload and a PR comment when violations are found.
+  Machine-verify AI development standards (CLAUDE.md / agents / skills)
+  with SARIF upload and PR comments on violations.
 author: "Novexar"
 branding:
   icon: "shield"
