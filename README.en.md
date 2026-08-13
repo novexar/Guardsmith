@@ -57,10 +57,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: novexar/Guardsmith/packages/action@v0.2.1
+      - uses: novexar/Guardsmith@v0.3.0
 ```
 
-See `packages/action/README.md` for inputs (SARIF upload, tokens for private repositories).
+The action runs the published CLI via `npx @guardsmith/cli`. On violations the job fails,
+the console report lands in the Job Summary, and a summary comment is posted on the PR.
+Key inputs: `cli-version` (npm version of the CLI, default `0.2.1`), `root` / `policy`,
+`upload-sarif` (set `"false"` on private repos without GHAS — the SARIF is still kept as
+an artifact), `pr-comment`, and `guardsmith-token` (PAT only needed for private overlay
+repositories referenced via `github:` refs).
 
 ### D. Following standards updates
 
@@ -84,9 +89,9 @@ See `packages/action/README.md` for inputs (SARIF upload, tokens for private rep
 
 ```
 guardsmith/
+├── action.yml            # GuardSmith Lint GitHub Action (SARIF + PR comment)
 ├── packages/core/        # @guardsmith/core — rule engine + CLI core
 ├── packages/cli/         # @guardsmith/cli — the `guard` binary
-├── packages/action/      # GuardSmith Lint GitHub Action (SARIF + PR comment)
 ├── presets/
 │   ├── baseline.yaml     # standard ruleset for generated projects
 │   └── self.yaml         # self-check ruleset for this repository (dogfooding)

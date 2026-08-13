@@ -70,11 +70,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: novexar/Guardsmith/packages/action@v0.2.1
+      - uses: novexar/Guardsmith@v0.3.0
 ```
 
-入出力の詳細(SARIF アップロード、private リポジトリでのトークン指定など)は
-[packages/action/README.md](packages/action/README.md) を参照。
+Action は npm 公開版 CLI(`npx @guardsmith/cli`)を実行する。違反があるとジョブが失敗し、
+コンソールレポートが Job Summary に載り、PR に検出サマリがコメントされる。主な inputs:
+
+| input              | default                   | 説明                                                                                                  |
+| ------------------ | ------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `cli-version`      | `0.2.1`                   | 実行する `@guardsmith/cli` の npm バージョン                                                          |
+| `root` / `policy`  | `.` / `guard.policy.yaml` | 検査対象ディレクトリ / ポリシーファイル                                                               |
+| `upload-sarif`     | `true`                    | Code Scanning への SARIF アップロード(GHAS の無い private では `"false"`。SARIF は artifact にも残る) |
+| `pr-comment`       | `true`                    | 失敗時の PR コメント(`permissions: pull-requests: write` が必要)                                      |
+| `guardsmith-token` | `github.token`            | `github:` リモート参照の取得用(private overlay を使う場合のみ PAT を指定)                             |
 
 ### D. 標準の更新に追随する
 
@@ -98,9 +106,9 @@ jobs:
 
 ```
 guardsmith/
+├── action.yml            # GuardSmith Lint GitHub Action(SARIF + PRコメント)
 ├── packages/core/        # @guardsmith/core — ルールエンジン + CLI 本体
 ├── packages/cli/         # @guardsmith/cli — guard バイナリ
-├── packages/action/      # GuardSmith Lint GitHub Action(SARIF + PRコメント)
 ├── presets/
 │   ├── baseline.yaml     # 生成PJ向け標準ルールセット
 │   └── self.yaml         # 本リポジトリ自身のセルフ検査用(dogfooding)

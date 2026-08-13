@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.3.0 (2026-08-13)
+
+### Changed
+
+- GitHub Action をリポジトリルート(`action.yml`)へ移設し、Marketplace 公開可能な構成に。
+  利用側は `uses: novexar/Guardsmith@v0.3.0` に変更(旧 `packages/action` は削除)
+- Action の CLI 取得を「リポジトリ checkout + pnpm install」から npm 公開版の
+  `npx @guardsmith/cli`(`cli-version` 入力でバージョン固定)へ変更 — セットアップが不要になり高速化。
+  `guardsmith-ref` 入力は廃止(`cli-version` に置換)
+
+npm パッケージ(@guardsmith/core / cli)は 0.2.1 のまま(CLI 本体に変更なし)。
+
 ## v0.2.1 (2026-08-13)
 
 ### Changed
