@@ -16,7 +16,13 @@ import { ASSET_ROOT } from "./paths.js";
 import { loadPolicy, toSarif } from "./resolver.js";
 import { applySync, formatPlan, planSync } from "./sync.js";
 
-const VERSION = "0.2.1";
+const VERSION = "0.2.2";
+
+/**
+ * guard new が参照する標準(standards/ + baseline)のタグ。
+ * npm パッケージ版(VERSION)とは独立に、標準の内容が変わったリリースでのみ上げる。
+ */
+const STANDARDS_TAG = "0.2.1";
 
 const INIT_TEMPLATE = `version: 1
 target: claude-code
@@ -32,7 +38,7 @@ output:
 const NEW_POLICY_TEMPLATE = `version: 1
 target: claude-code
 extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v${VERSION}
+  - github:novexar/guardsmith//presets/baseline.yaml@v${STANDARDS_TAG}
 rules: []
 exemptions: []
 output:
@@ -52,9 +58,13 @@ export async function main(argv: string[]): Promise<number> {
       return newProject(rest[0]);
     case "explain":
       return explain(rest[0]);
+    case "version":
+    case "--version":
+      console.log(`guard ${VERSION} (standards v${STANDARDS_TAG})`);
+      return 0;
     default:
       console.error(
-        "usage: guard <init|lint|sync|new|explain>\n" +
+        "usage: guard <init|lint|sync|new|explain|version>\n" +
           "  guard init\n" +
           "  guard lint [--root <dir>] [--policy <file>] [--format console|sarif|json] [--out <file>] [--no-cache]\n" +
           "  guard sync [--root <dir>] [--policy <file>] [--write] [--no-cache]\n" +
@@ -169,7 +179,7 @@ function newProject(dir?: string): number {
   if (existsSync(claudeMd)) {
     const updated = readFileSync(claudeMd, "utf8").replace(
       /<!-- standards: novexar\/[\w-]+ v[\w.-]+ -->/,
-      `<!-- standards: novexar/guardsmith v${VERSION} -->`,
+      `<!-- standards: novexar/guardsmith v${STANDARDS_TAG} -->`,
     );
     writeFileSync(claudeMd, updated);
   }

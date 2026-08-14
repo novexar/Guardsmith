@@ -20,6 +20,20 @@ pnpm add -D @guardsmith/cli        # PJ に導入して pnpm guard <command>
 
 このリポジトリのチェックアウトから実行する場合は `pnpm install` 後に `pnpm guard <command>`。
 
+### npm レジストリを使わない利用(GitHub Releases)
+
+npm レジストリへ到達できない環境(閉域網・egress 制限)向けに、依存をすべて同梱した
+単一バンドルを [GitHub Releases](https://github.com/novexar/Guardsmith/releases) で配布しています。
+GitHub にさえ届けば動作します(必要なのは Node.js 20+ のみ):
+
+```bash
+gh release download v0.4.0 --repo novexar/Guardsmith --pattern 'guardsmith-cli-*.tar.gz'
+tar -xzf guardsmith-cli-*.tar.gz
+node guardsmith-cli/guard.mjs lint
+```
+
+ポリシー・標準の取得(`extends` / drift / sync)はもともと GitHub のみで完結し、npm には依存しません。
+
 ## 導入手順
 
 ### A. 新規プロジェクト
@@ -70,7 +84,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: novexar/Guardsmith@v0.3.0
+      - uses: novexar/Guardsmith@v0.4.0
 ```
 
 Action は npm 公開版 CLI(`npx @guardsmith/cli`)を実行する。違反があるとジョブが失敗し、
@@ -78,11 +92,12 @@ Action は npm 公開版 CLI(`npx @guardsmith/cli`)を実行する。違反が�
 
 | input              | default                   | 説明                                                                                                  |
 | ------------------ | ------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `cli-version`      | `0.2.1`                   | 実行する `@guardsmith/cli` の npm バージョン                                                          |
+| `cli-version`      | `0.2.2`                   | 実行する `@guardsmith/cli` の npm バージョン                                                          |
 | `root` / `policy`  | `.` / `guard.policy.yaml` | 検査対象ディレクトリ / ポリシーファイル                                                               |
 | `upload-sarif`     | `true`                    | Code Scanning への SARIF アップロード(GHAS の無い private では `"false"`。SARIF は artifact にも残る) |
 | `pr-comment`       | `true`                    | 失敗時の PR コメント(`permissions: pull-requests: write` が必要)                                      |
 | `guardsmith-token` | `github.token`            | `github:` リモート参照の取得用(private overlay を使う場合のみ PAT を指定)                             |
+| `source`           | `npm`                     | CLI の取得元。`release` で npm レジストリ不要(GitHub Releases のバンドルを使用。`release-tag` で固定) |
 
 ### D. 標準の更新に追随する
 

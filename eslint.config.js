@@ -3,7 +3,7 @@ import tseslint from "typescript-eslint";
 import prettier from "eslint-config-prettier";
 
 export default tseslint.config(
-  { ignores: ["**/node_modules/", "**/coverage/", "**/dist/", "standards/"] },
+  { ignores: ["**/node_modules/", "**/coverage/", "**/dist/", "standards/", "release/"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   prettier,
@@ -16,7 +16,7 @@ export default tseslint.config(
     // Node で実行するプレーン JS(bin / scripts)
     files: ["**/*.mjs", "packages/cli/bin/**/*.js"],
     languageOptions: {
-      globals: { console: "readonly", process: "readonly" },
+      globals: { console: "readonly", process: "readonly", URL: "readonly" },
     },
   },
 );

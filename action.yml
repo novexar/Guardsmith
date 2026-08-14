@@ -8,10 +8,21 @@ branding:
   color: "purple"
 
 inputs:
-  cli-version:
-    description: "@guardsmith/cli version to run (npm)"
+  source:
+    description: >-
+      Where to obtain the guard CLI from: 'npm' (default, runs npx against the
+      npm registry) or 'release' (downloads the self-contained bundle from
+      GitHub Releases — no npm registry access required).
     required: false
-    default: "0.2.1"
+    default: "npm"
+  cli-version:
+    description: "@guardsmith/cli version to run (used when source is 'npm')"
+    required: false
+    default: "0.2.2"
+  release-tag:
+    description: "GuardSmith release tag to download the bundle from (used when source is 'release')"
+    required: false
+    default: "v0.4.0"
   guardsmith-token:
     description: >-
       Token used to fetch remote policy/standards repos referenced via
@@ -53,21 +64,48 @@ outputs:
 runs:
   using: "composite"
   steps:
+    - name: Prepare guard CLI
+      id: cli
+      shell: bash
+      env:
+        SOURCE: ${{ inputs.source }}
+        CLI_VERSION: ${{ inputs.cli-version }}
+        RELEASE_TAG: ${{ inputs.release-tag }}
+        GH_TOKEN: ${{ inputs.guardsmith-token }}
+      run: |
+        case "$SOURCE" in
+          npm)
+            echo "cmd=npx -y @guardsmith/cli@$CLI_VERSION" >> "$GITHUB_OUTPUT"
+            ;;
+          release)
+            dir="$RUNNER_TEMP/guardsmith-cli"
+            mkdir -p "$dir"
+            gh release download "$RELEASE_TAG" --repo novexar/Guardsmith \
+              --pattern 'guardsmith-cli-*.tar.gz' --dir "$dir"
+            tar -xzf "$dir"/guardsmith-cli-*.tar.gz -C "$dir"
+            echo "cmd=node $dir/guardsmith-cli/guard.mjs" >> "$GITHUB_OUTPUT"
+            ;;
+          *)
+            echo "invalid source: $SOURCE (expected 'npm' or 'release')" >&2
+            exit 1
+            ;;
+        esac
+
     - name: Run guard lint
       id: lint
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.guardsmith-token }}
-        CLI_VERSION: ${{ inputs.cli-version }}
+        GUARD: ${{ steps.cli.outputs.cmd }}
         LINT_ROOT: ${{ inputs.root }}
         LINT_POLICY: ${{ inputs.policy }}
       run: |
         set +e
         root="$GITHUB_WORKSPACE/$LINT_ROOT"
-        npx -y "@guardsmith/cli@$CLI_VERSION" lint \
+        $GUARD lint \
           --root "$root" --policy "$LINT_POLICY" | tee "$GITHUB_WORKSPACE/guardsmith-report.txt"
         code=${PIPESTATUS[0]}
-        npx -y "@guardsmith/cli@$CLI_VERSION" lint \
+        $GUARD lint \
           --root "$root" --policy "$LINT_POLICY" \
           --format sarif --out "$GITHUB_WORKSPACE/guardsmith.sarif" > /dev/null
         echo "exit-code=$code" >> "$GITHUB_OUTPUT"

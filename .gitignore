@@ -8,3 +8,4 @@ report.sarif
 packages/core/presets/
 packages/core/standards/
 .DS_Store
+release/

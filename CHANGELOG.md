@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.4.0 (2026-08-14)
+
+### Added
+
+- **GitHub Releases での単一バンドル配布**: 依存をすべて同梱した `guard.mjs` + presets/standards の
+  tar.gz をリリースに添付。npm レジストリへ到達できない環境(閉域網・egress制限)でも
+  GitHub のみで CLI を利用可能に(`node guard.mjs lint`)
+- **Action の取得元選択**: `source: npm | release` 入力を追加(既定 npm)。`release` は
+  GitHub Releases のバンドルを使用し、npm レジストリ不要で実行(`release-tag` でタグ固定)
+- npm パッケージに日英併記の README を同梱(`@guardsmith/core` / `@guardsmith/cli` 0.2.2 —
+  これまで npmjs.com 上で説明が表示されていなかった問題の解消)
+
+### Changed
+
+- `guard new` の参照タグを npm バージョンから分離(`STANDARDS_TAG`)。標準の内容が変わった
+  リリースでのみ参照タグを上げる運用に(現在 v0.2.1)
+
 ## v0.3.0 (2026-08-13)
 
 ### Changed
