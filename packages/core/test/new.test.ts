@@ -3,7 +3,7 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { parse } from "yaml";
-import { main } from "../src/cli.js";
+import { main, restoreDotfiles } from "../src/cli.js";
 import { parsePolicy } from "../src/schema.js";
 import { makeFixtureDir, write } from "./helpers.js";
 
@@ -25,6 +25,9 @@ describe("guard new", () => {
     expect(existsSync(join(dest, ".claude/agents/backend-engineer.md"))).toBe(true);
     expect(existsSync(join(dest, ".claude/skills/start-task/SKILL.md"))).toBe(true);
     expect(existsSync(join(dest, "docs/REQUIREMENTS.md"))).toBe(true);
+    // .gitignore が(どの配布経路でも)存在すること(#1)
+    expect(existsSync(join(dest, ".gitignore"))).toBe(true);
+    expect(existsSync(join(dest, "gitignore"))).toBe(false);
 
     // standards バージョンコメントが guardsmith 版へ書き換わっている
     const claudeMd = readFileSync(join(dest, "CLAUDE.md"), "utf8");
@@ -36,6 +39,21 @@ describe("guard new", () => {
     expect(policyRaw).toContain("github:novexar/guardsmith//presets/baseline.yaml@v0.2.1");
     const parsed = parsePolicy(parse(policyRaw));
     expect(parsed.ok).toBe(true);
+  });
+
+  it("restoreDotfiles renames a dotless gitignore (npm パッケージ配布経路 — #1)", () => {
+    const dir = makeFixtureDir("gs-new-dotfiles");
+    cleanupDirs.push(dir);
+    write(dir, "gitignore", "node_modules/\n");
+    restoreDotfiles(dir);
+    expect(existsSync(join(dir, ".gitignore"))).toBe(true);
+    expect(existsSync(join(dir, "gitignore"))).toBe(false);
+    expect(readFileSync(join(dir, ".gitignore"), "utf8")).toContain("node_modules/");
+    // 両方ある場合はドット付きを正としてドットなしを消す(冪等)
+    write(dir, "gitignore", "duplicate\n");
+    restoreDotfiles(dir);
+    expect(readFileSync(join(dir, ".gitignore"), "utf8")).toContain("node_modules/");
+    expect(existsSync(join(dir, "gitignore"))).toBe(false);
   });
 
   it("refuses a non-empty directory and requires <dir>", async () => {

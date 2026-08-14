@@ -1,5 +1,14 @@
 # Changelog
 
+## @guardsmith/core 0.2.3 (2026-08-14)
+
+### Fixed
+
+- `guard new` で展開したプロジェクトに `.gitignore` が含まれない問題(#1)。
+  npm pack が `.gitignore` をパッケージから常に除外する仕様が原因。prepack で
+  ドットなし(`standards/gitignore`)にして同梱し、`guard new` の展開時に復元する。
+  GitHub Releases バンドル経由は従来から影響なし
+
 ## v0.4.0 (2026-08-14)
 
 ### Added

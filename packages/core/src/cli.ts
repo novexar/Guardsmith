@@ -8,7 +8,15 @@
  *   guard explain <rule-id>
  * exit code: 0 = pass / 1 = error検出 / 2 = 実行エラー
  */
-import { cpSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { formatConsole, runLint } from "./lint.js";
@@ -16,7 +24,7 @@ import { ASSET_ROOT } from "./paths.js";
 import { loadPolicy, toSarif } from "./resolver.js";
 import { applySync, formatPlan, planSync } from "./sync.js";
 
-const VERSION = "0.2.2";
+const VERSION = "0.2.3";
 
 /**
  * guard new が参照する標準(standards/ + baseline)のタグ。
@@ -173,6 +181,7 @@ function newProject(dir?: string): number {
     return 2;
   }
   cpSync(standardsDir, dest, { recursive: true });
+  restoreDotfiles(dest);
 
   // 展開時の加工: standards バージョンコメントを guardsmith 版へ更新
   const claudeMd = join(dest, "CLAUDE.md");
@@ -192,6 +201,21 @@ function newProject(dir?: string): number {
       "  2. guard lint  (errors are expected until init-project is completed)",
   );
   return 0;
+}
+
+/**
+ * npm パッケージ同梱時にドットなしへ退避したファイルを復元する
+ * (npm pack が .gitignore を常に除外するため — novexar/Guardsmith#1)。
+ * リポジトリ/バンドル配布ではもとから .gitignore が存在し、何もしない。
+ */
+export function restoreDotfiles(dest: string): void {
+  const dotless = join(dest, "gitignore");
+  const dotted = join(dest, ".gitignore");
+  if (existsSync(dotless) && !existsSync(dotted)) {
+    renameSync(dotless, dotted);
+  } else if (existsSync(dotless)) {
+    rmSync(dotless);
+  }
 }
 
 async function explain(ruleId?: string): Promise<number> {

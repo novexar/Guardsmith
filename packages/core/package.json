@@ -1,6 +1,6 @@
 {
   "name": "@guardsmith/core",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "GuardSmith rule engine + CLI core (guard init / lint / sync / new / explain)",
   "license": "Apache-2.0",
   "repository": {
