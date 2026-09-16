@@ -104,7 +104,7 @@ rules:
     with:
       # マスターは guardsmith リポジトリの standards/ サブディレクトリ。
       # loadPolicy がタグのtarballを取得・キャッシュし file: に解決してから検査する
-      source: github:novexar/guardsmith//standards@v0.2.1
+      source: github:novexar/guardsmith//standards@v0.5.0
       paths: [".claude/skills/**"]
       allow_sections: ["## PJ固有手順"]
 

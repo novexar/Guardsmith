@@ -42,7 +42,7 @@ npx @guardsmith/cli explain claude-md/thin-diff
 version: 1
 target: claude-code
 extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v0.2.1 # タグ固定必須
+  - github:novexar/guardsmith//presets/baseline.yaml@v0.5.0 # タグ固定必須
 rules: [] # 追加・上書き(同idで再定義=上書き)
 exemptions: [] # 期限付き例外(expires + approved_by 必須。期限切れは error)
 ```
@@ -64,7 +64,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: novexar/Guardsmith@v0.4.0
+      - uses: novexar/Guardsmith@v0.5.0
 ```
 
 違反があるとジョブが失敗し、レポートが Job Summary と PR コメントに載ります(SARIF 出力対応)。
@@ -113,7 +113,7 @@ and expired exemptions surface as errors.
 
 ## CI enforcement
 
-Use the GitHub Action `novexar/Guardsmith@v0.4.0` — on violations the job fails, the
+Use the GitHub Action `novexar/Guardsmith@v0.5.0` — on violations the job fails, the
 report lands in the Job Summary and a PR comment, and a SARIF report is produced.
 
 ## Documentation

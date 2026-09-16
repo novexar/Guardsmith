@@ -28,7 +28,7 @@ self-contained bundle is published on [GitHub Releases](https://github.com/novex
 only GitHub access and Node.js 20+ are required:
 
 ```bash
-gh release download v0.4.0 --repo novexar/Guardsmith --pattern 'guardsmith-cli-*.tar.gz'
+gh release download v0.5.0 --repo novexar/Guardsmith --pattern 'guardsmith-cli-*.tar.gz'
 tar -xzf guardsmith-cli-*.tar.gz
 node guardsmith-cli/guard.mjs lint
 ```
@@ -72,12 +72,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: novexar/Guardsmith@v0.4.0
+      - uses: novexar/Guardsmith@v0.5.0
 ```
 
 The action runs the published CLI via `npx @guardsmith/cli`. On violations the job fails,
 the console report lands in the Job Summary, and a summary comment is posted on the PR.
-Key inputs: `cli-version` (npm version of the CLI, default `0.2.2`), `root` / `policy`,
+Key inputs: `cli-version` (npm version of the CLI, default `0.3.0`), `root` / `policy`,
 `upload-sarif` (set `"false"` on private repos without GHAS — the SARIF is still kept as
 an artifact), `pr-comment`, and `guardsmith-token` (PAT only needed for private overlay
 repositories referenced via `github:` refs).

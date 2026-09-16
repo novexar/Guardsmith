@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.5.0 (2026-09-16)
+
+標準の大規模刷新リリース(PR #3〜#7 を集約)。標準参照タグ(`STANDARDS_TAG`)を v0.5.0 に更新。
+既存 PJ の追随手順は docs/migration/v0.5.0.md を参照(タグ固定のため放置しても壊れない。追随は任意・段階適用可)。
+
+### Added
+
+- **A: フロントエンド UI 基盤標準**: shadcn/ui + Tailwind + TanStack を標準スタックとして採用。
+  `presets/frontend.yaml` を新設(FE を持つ PJ のみ `extends` に追加。baseline には含めず
+  BE のみの PJ への誤警告を回避)。詳細: standards/docs/FRONTEND_STANDARDS.md
+- **C: ponytail 導入**(過剰実装抑制): `.claude/settings.json` でマーケットプレイスを自動登録、
+  `finish-task` の品質ゲート前に `/ponytail-review` を実行。テスト・入力検証・セキュリティ・a11y は
+  削減対象外と明記
+- **D: DESIGN.md 運用**: awesome-design-md-jp ベースのデザイン仕様テンプレート(日本語 UI 仕様込み)を
+  標準に追加。init-project で PJ ごとに具体化
+- **F: Issue テンプレート標準化と外部連携の受け口**: feature / bug / chore の3種・固定見出し
+  (旧 task.md は廃止)。`start-task` のブランチ命名を `<type>/<issue番号>-<slug>` に統一
+  (外部ツールがブランチ名から Issue 番号を逆引きする契約)。HTTP hooks サンプル
+  (`.claude/settings.local.json.example`)を同梱
+- baseline 新ルール: `agents/no-pinned-model` / `ci/no-remote-test-workflows`(いずれも warn で開始)
+
+### Changed
+
+- **B: CI/CD 方針変更**: 日常 CI は Docker ローカル(`make ci`)に移行し、GitHub Actions は
+  main push の deploy のみに。CI 結果 JSON を `.guardsmith/ci-results/` に出力し外部ツールの
+  受け口とする。GuardSmith 自身は fork PR 限定の External PR CI を維持(ADR 0001)
+- **E: agents の model/effort ポリシー**: qa は fable / effort high、実装系は sonnet を標準に
+  (docs/AGENTS.md)。日付付き model ID のハードコードは baseline(`agents/no-pinned-model`)が警告
+- リモート参照タグ・生成物のスタンプを v0.5.0 に更新(baseline の drift source /
+  `guard new` の policy 生成 / docs 例示)
+- npm: `@guardsmith/core` 0.3.0 / `@guardsmith/cli` 0.3.0(Action の `cli-version` 既定も 0.3.0)
+
 ## @guardsmith/core 0.2.3 (2026-08-14)
 
 ### Fixed

@@ -27,7 +27,7 @@ npm レジストリへ到達できない環境(閉域網・egress 制限)向け�
 GitHub にさえ届けば動作します(必要なのは Node.js 20+ のみ):
 
 ```bash
-gh release download v0.4.0 --repo novexar/Guardsmith --pattern 'guardsmith-cli-*.tar.gz'
+gh release download v0.5.0 --repo novexar/Guardsmith --pattern 'guardsmith-cli-*.tar.gz'
 tar -xzf guardsmith-cli-*.tar.gz
 node guardsmith-cli/guard.mjs lint
 ```
@@ -84,7 +84,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: novexar/Guardsmith@v0.4.0
+      - uses: novexar/Guardsmith@v0.5.0
 ```
 
 Action は npm 公開版 CLI(`npx @guardsmith/cli`)を実行する。違反があるとジョブが失敗し、
@@ -92,7 +92,7 @@ Action は npm 公開版 CLI(`npx @guardsmith/cli`)を実行する。違反が�
 
 | input              | default                   | 説明                                                                                                  |
 | ------------------ | ------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `cli-version`      | `0.2.2`                   | 実行する `@guardsmith/cli` の npm バージョン                                                          |
+| `cli-version`      | `0.3.0`                   | 実行する `@guardsmith/cli` の npm バージョン                                                          |
 | `root` / `policy`  | `.` / `guard.policy.yaml` | 検査対象ディレクトリ / ポリシーファイル                                                               |
 | `upload-sarif`     | `true`                    | Code Scanning への SARIF アップロード(GHAS の無い private では `"false"`。SARIF は artifact にも残る) |
 | `pr-comment`       | `true`                    | 失敗時の PR コメント(`permissions: pull-requests: write` が必要)                                      |

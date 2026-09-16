@@ -56,4 +56,4 @@ main                     ← リリースライン。タグ vX.Y.Z で配布(リ
 
 - 3層overlay設計: @docs/LAYERING.md
 
-<!-- standards: novexar/guardsmith v0.2.1 -->
+<!-- standards: novexar/guardsmith v0.5.0 -->
