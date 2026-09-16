@@ -21,6 +21,28 @@
 - セキュリティ要素(認証・入力処理・DB クエリ・外部 API・決済)の変更時はセキュリティ観点レビューを必ず実施。
 - オーナーへの確認は「方針判断が必要な場面のみ」。それ以外は継続的に開発を進行する。
 
+## 過剰実装の抑制(ponytail)
+[ponytail](https://github.com/DietrichGebert/ponytail) プラグイン(MIT)が SessionStart hook でスキルを注入し、
+実装判断に**はしご原則**を適用する: **作らない → 再利用 → 標準ライブラリ → 最小実装**。
+上の段で解決できるなら下の段に降りない。迷ったら作らない側を選ぶ。
+
+- 既定強度は **full**。変更は環境変数 `PONYTAIL_DEFAULT_MODE`(lite / full / ultra)。
+- コマンド: `/ponytail-review`(差分の過剰設計指摘。`finish-task` の品質ゲート前に実行)、`/ponytail-audit`、`/ponytail-debt`。
+
+**TDD/カバレッジ 80% との両立**: はしごが削るのはプロダクションコードの過剰な抽象化・自作・先回り実装であり、
+テストコード・境界での入力検証・セキュリティ実装・アクセシビリティ(a11y)は削減対象外。
+「最小実装」とは検証やテストを省くことではなく、要求を満たす最小の設計を選ぶことを指す。
+
+### 初回セットアップ
+- 本リポジトリの `.claude/settings.json` により、ponytail マーケットプレイスはフォルダを開いた時点で
+  自動登録される(初回はフォルダ trust の確認プロンプトが出る)。
+- ただしプラグイン本体は個別インストールが必要な場合がある。有効にならないときは
+  `/plugin marketplace add DietrichGebert/ponytail` → `/plugin install ponytail@ponytail` を実行する。
+- Node.js が非対話シェルの PATH に必要。
+- 仕様確認の根拠(確認日 2026-09-16):
+  [settings-reference](https://code.claude.com/docs/en/settings-reference) /
+  [discover-plugins](https://code.claude.com/docs/en/discover-plugins)
+
 ## PJ 固有の運用差分
 <!-- gen: 無ければ「特記事項なし」 -->
 - {{WORKFLOW_DIFFS}}

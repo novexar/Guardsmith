@@ -167,6 +167,31 @@ describe("baseline: bad fixture", () => {
   });
 });
 
+describe("security/dangerous-permissions", () => {
+  it("does not error on settings.json without a permissions key (guard new 配布物と同形)", async () => {
+    const root = makeFixtureDir("gs-settings-noperm");
+    try {
+      write(
+        root,
+        ".claude/settings.json",
+        JSON.stringify({
+          $schema: "https://json.schemastore.org/claude-code-settings.json",
+          extraKnownMarketplaces: {
+            ponytail: { source: { source: "github", repo: "DietrichGebert/ponytail" } },
+          },
+          enabledPlugins: { "ponytail@ponytail": true },
+        }),
+      );
+      const result = await runLint(policy, root);
+      expect(result.findings.filter((f) => f.ruleId === "security/dangerous-permissions")).toEqual(
+        [],
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("exemptions", () => {
   it("active exemption suppresses / expired exemption surfaces as error", async () => {
     const withEx: PolicyDocument = {

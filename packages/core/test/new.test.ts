@@ -29,6 +29,14 @@ describe("guard new", () => {
     expect(existsSync(join(dest, ".gitignore"))).toBe(true);
     expect(existsSync(join(dest, "gitignore"))).toBe(false);
 
+    // ponytail 導入用の共有 settings.json が展開され、JSON として妥当である
+    const settingsPath = join(dest, ".claude/settings.json");
+    expect(existsSync(settingsPath)).toBe(true);
+    const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as {
+      enabledPlugins?: Record<string, boolean>;
+    };
+    expect(settings.enabledPlugins?.["ponytail@ponytail"]).toBe(true);
+
     // standards バージョンコメントが guardsmith 版へ書き換わっている
     const claudeMd = readFileSync(join(dest, "CLAUDE.md"), "utf8");
     expect(claudeMd).toContain("<!-- standards: novexar/guardsmith v0.2.1 -->");
