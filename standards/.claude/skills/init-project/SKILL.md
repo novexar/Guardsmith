@@ -32,6 +32,12 @@ description: マスターテンプレートからコピーされた本リポジ�
 - エージェントの「作業フロー」「共通規約」「原則」など Novexar 標準と明記された節は**削除・緩和・改変禁止**(PJ 固有の追記は可)。
 - モノレポの場合、`.claude/templates/CLAUDE.system.md` は `new-system` スキルが使うため残す。単一システムなら削除してよい。
 
+#### フロントエンド関連(FE の有無で分岐)
+- **FE がある PJ**:
+  - `/DESIGN.md` を PJ の性質に合わせて具体化する。**参考にする design-md(既存サービスや類似ダッシュボード)を PM がオーナーに確認してから**編集する。`docs/FRONTEND_STANDARDS.md` の標準(ダークモード既定・アクセント1色・ステータス3色)を反映する。
+  - `guard.policy.yaml` の `extends` に frontend プリセット(`github:novexar/guardsmith//presets/frontend.yaml@vX.Y.Z`。ローカルなら `preset:frontend`)を追加する。
+- **FE が無い PJ**: `/DESIGN.md` と `.claude/templates/frontend/` をフォルダごと削除する(frontend-engineer.md の削除と同時に行う)。
+
 ### 3. 自己検証(Definition of Done)
 初期化完了の宣言前に、以下を **すべて機械的に確認** する:
 

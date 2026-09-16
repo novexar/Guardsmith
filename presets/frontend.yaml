@@ -1,0 +1,52 @@
+# GuardSmith frontend preset — ダッシュボード系 UI を持つ PJ 向けの追加ルールセット
+# 対象: standards/docs/FRONTEND_STANDARDS.md の標準スタックを採用する PJ
+# baseline.yaml には含めない(BE のみの PJ が誤警告を受けないための分離。docs/decisions/0002 参照)。
+# 使い方: FE を持つ PJ の guard.policy.yaml の extends に baseline と併せて追加する
+#   - ローカル参照:  preset:frontend
+#   - リモート参照:  github:novexar/guardsmith//presets/frontend.yaml@vX.Y.Z(タグ固定必須)
+version: 1
+target: claude-code
+rules:
+  # --- デザイン仕様書の存在 (UI 実装の前提。init-project が雛形から具体化する) ---
+  - id: frontend/design-md
+    severity: warn
+    description: デザイン仕様書 DESIGN.md がリポジトリルートに存在すること
+    check: file-exists
+    with:
+      paths:
+        - DESIGN.md
+
+  # --- shadcn/ui 構成 ---
+  # Tailwind v4 は CSS-first 設定が標準で tailwind.config.* を持たない構成があるため、
+  # 機械判定は components.json のみ必須とする(Tailwind 設定の所在は components.json の
+  # tailwind.css / tailwind.config フィールドが指す)
+  - id: frontend/shadcn-config
+    severity: warn
+    description: shadcn/ui の設定 components.json が存在すること(Tailwind 設定の所在も components.json が指す)
+    check: file-exists
+    with:
+      paths:
+        - components.json
+
+  # --- 競合 UI ライブラリの混在禁止 (標準スタックは shadcn/ui + Tailwind) ---
+  - id: frontend/no-competing-ui-libs
+    severity: warn
+    description: package.json に @mui / antd / @chakra-ui を含めないこと(shadcn/ui + Tailwind と混在させない)
+    check: content-match
+    with:
+      path: package.json
+      must_not:
+        - '"@mui/'
+        - '"antd"'
+        - '"@chakra-ui/'
+
+  # --- DESIGN.md の具体化完了 (init-project の完了条件) ---
+  - id: frontend/design-md-initialized
+    severity: warn
+    description: DESIGN.md が雛形のまま運用されていないこと(プレースホルダ・gen:コメントの残存禁止)
+    check: content-match
+    with:
+      path: DESIGN.md
+      must_not:
+        - '\{\{.*\}\}'
+        - "<!-- gen:"

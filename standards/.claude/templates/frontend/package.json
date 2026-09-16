@@ -1,0 +1,33 @@
+{
+  "//": "gen: 依存の目安(メジャーのみ)。実 PJ では pnpm create vite + pnpm dlx shadcn@latest init で生成し、この構成・命名に合わせる",
+  "name": "{{FE_APP_NAME}}",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "generate:api": "openapi-typescript {{OPENAPI_URL}} -o src/types/api.d.ts"
+  },
+  "dependencies": {
+    "react": "^19",
+    "react-dom": "^19",
+    "@tanstack/react-router": "^1",
+    "@tanstack/react-query": "^5",
+    "@tanstack/react-table": "^8",
+    "cmdk": "^1",
+    "lucide-react": "^0",
+    "recharts": "^2"
+  },
+  "devDependencies": {
+    "vite": "^7",
+    "@vitejs/plugin-react": "^5",
+    "@tanstack/router-plugin": "^1",
+    "typescript": "^5",
+    "tailwindcss": "^4",
+    "@tailwindcss/vite": "^4",
+    "openapi-typescript": "^7",
+    "vitest": "^4"
+  }
+}

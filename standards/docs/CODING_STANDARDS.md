@@ -12,6 +12,7 @@
 ## スタック固有
 ### フロントエンド({{FE_STACK}})
 <!-- gen: Lint/Formatter 設定、型の厳格度、ディレクトリ規約、状態管理方針を具体化 -->
+- UI 基盤・ダッシュボード標準は `docs/FRONTEND_STANDARDS.md` と `/DESIGN.md` に従う。
 - {{FE_STANDARDS}}
 
 ### バックエンド({{BE_STACK}})

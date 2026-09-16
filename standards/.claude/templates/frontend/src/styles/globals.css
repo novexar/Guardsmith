@@ -1,0 +1,33 @@
+/* gen: Tailwind v4 CSS-first 設定の例(tailwind.config.* は持たない構成が標準)。
+   実 PJ では shadcn init が生成する globals.css を基に、DESIGN.md のトークンを反映する。 */
+@import "tailwindcss";
+
+/* ダークモード既定(DESIGN.md)。html に .dark を付与して運用する */
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* gen: DESIGN.md の Color Palette を shadcn トークンに反映する(値は例) */
+  --background: {{NEUTRAL_BG}};
+  --foreground: {{NEUTRAL_FG}};
+  --border: {{NEUTRAL_BORDER}}; /* hairline border(低コントラスト) */
+  --primary: {{ACCENT_COLOR}}; /* アクセントは 1 色のみ */
+  --success: {{SUCCESS_COLOR}};
+  --warning: {{WARNING_COLOR}};
+  --danger: {{DANGER_COLOR}};
+}
+
+@theme inline {
+  --font-sans: "Inter", "Noto Sans JP", system-ui, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+}
+
+body {
+  line-height: 1.6; /* 日本語本文 1.5 以上(DESIGN.md) */
+  font-kerning: normal;
+}

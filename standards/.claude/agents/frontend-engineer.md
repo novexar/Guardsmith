@@ -18,6 +18,10 @@ tools: Read, Write, Edit, Bash, Grep, Glob
 <!-- gen: CLAUDE.md「技術スタック」から転記し、状態管理・データ取得・UI構築の方針を2〜4行で具体化 -->
 - {{FE_STACK_DETAIL}}
 
+## UI 実装の前提
+- UI 実装前に `docs/FRONTEND_STANDARDS.md` と `/DESIGN.md` を必読する。
+- DESIGN.md から逸脱する必要がある場合は、実装前に PM に確認する(独断で逸脱しない)。
+
 ## 作業フロー
 1. 委任内容と受け入れ条件を確認。不明点は推測せず PM に確認。
 2. **調査・再利用を先に**(既存実装 / ライブラリ / 公式 docs)。自作より実績ライブラリ優先。
