@@ -44,6 +44,8 @@ function buildGood(root: string) {
   );
   write(root, "docs/overview.md", "docs\n");
   write(root, ".claude/settings.json", `{"permissions":{"allow":["npm test"]}}`);
+  // GuardSmith ランタイム成果物の除外(hygiene/guardsmith-artifacts-ignored の正例)
+  write(root, ".gitignore", "node_modules/\n.guardsmith/\n.claude/settings.local.json\n");
   // deploy.yml 相当(push main のみ・テスト系ステップ無し)は ci/no-remote-test-workflows に検出されない
   write(
     root,
@@ -81,6 +83,8 @@ function buildBad(root: string) {
     ".github/workflows/test.yml",
     "name: Test\non:\n  pull_request:\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: pnpm test\n",
   );
+  // GuardSmith ランタイム成果物の除外行が両方無い(hygiene/guardsmith-artifacts-ignored)
+  write(root, ".gitignore", "node_modules/\ndist/\n");
 }
 
 let goodRoot: string;
@@ -117,6 +121,12 @@ describe("baseline: good fixture", () => {
 
   it("does not flag deploy-only workflow (ci/no-remote-test-workflows)", () => {
     expect(good.findings.filter((f) => f.ruleId === "ci/no-remote-test-workflows")).toHaveLength(0);
+  });
+
+  it("does not flag .gitignore with both exclusion lines (hygiene/guardsmith-artifacts-ignored)", () => {
+    expect(
+      good.findings.filter((f) => f.ruleId === "hygiene/guardsmith-artifacts-ignored"),
+    ).toHaveLength(0);
   });
 });
 
@@ -190,6 +200,32 @@ describe("baseline: bad fixture", () => {
 
   it("detects missing standards version", () => {
     expect(ids()).toContain("claude-md/standards-version");
+  });
+
+  it("detects .gitignore missing both artifact exclusions (hygiene/guardsmith-artifacts-ignored)", () => {
+    const hits = bad.findings.filter(
+      (f) => f.ruleId === "hygiene/guardsmith-artifacts-ignored" && !f.suppressed,
+    );
+    // must の2パターン(.guardsmith/ と .claude/settings.local.json)がそれぞれ warn として検出される
+    expect(hits).toHaveLength(2);
+    expect(hits.every((f) => f.severity === "warn")).toBe(true);
+  });
+});
+
+describe("hygiene/guardsmith-artifacts-ignored", () => {
+  it("info-skips when .gitignore itself is absent (file-exists の責務)", async () => {
+    const root = makeFixtureDir("gs-no-gitignore");
+    try {
+      const result = await runLint(policy, root);
+      const hits = result.findings.filter(
+        (f) => f.ruleId === "hygiene/guardsmith-artifacts-ignored",
+      );
+      expect(hits).toHaveLength(1);
+      expect(hits[0].severity).toBe("info");
+      expect(hits[0].message).toContain("content-match skipped");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 

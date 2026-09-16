@@ -53,12 +53,12 @@ describe("guard new", () => {
 
     // standards バージョンコメントが guardsmith 版へ書き換わっている
     const claudeMd = readFileSync(join(dest, "CLAUDE.md"), "utf8");
-    expect(claudeMd).toContain("<!-- standards: novexar/guardsmith v0.5.0 -->");
+    expect(claudeMd).toContain("<!-- standards: novexar/guardsmith v0.5.1 -->");
     expect(claudeMd).not.toContain("standards: novexar/claude-standards");
 
     // タグ固定のリモート参照を持つ guard.policy.yaml が生成され、スキーマを通る
     const policyRaw = readFileSync(join(dest, "guard.policy.yaml"), "utf8");
-    expect(policyRaw).toContain("github:novexar/guardsmith//presets/baseline.yaml@v0.5.0");
+    expect(policyRaw).toContain("github:novexar/guardsmith//presets/baseline.yaml@v0.5.1");
     const parsed = parsePolicy(parse(policyRaw));
     expect(parsed.ok).toBe(true);
   });

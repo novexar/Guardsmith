@@ -104,7 +104,7 @@ rules:
     with:
       # マスターは guardsmith リポジトリの standards/ サブディレクトリ。
       # loadPolicy がタグのtarballを取得・キャッシュし file: に解決してから検査する
-      source: github:novexar/guardsmith//standards@v0.5.0
+      source: github:novexar/guardsmith//standards@v0.5.1
       paths: [".claude/skills/**"]
       allow_sections: ["## PJ固有手順"]
 
@@ -132,3 +132,14 @@ rules:
       path: .claude/settings.json
       assert:
         - { query: "$.permissions.allow[*]", op: not-matches, value: 'rm -rf|curl .*\|.*sh' }
+
+  # --- ハイジーン (GuardSmith ランタイム成果物のコミット防止) ---
+  - id: hygiene/guardsmith-artifacts-ignored
+    severity: warn
+    description: GuardSmith のランタイム成果物をコミットしない(.guardsmith/ はリポジトリ名・SHA等のPJ固有情報、settings.local.json は URL/トークンを含むため .gitignore で除外されていること)
+    check: content-match
+    with:
+      path: .gitignore
+      must:
+        - '^\.guardsmith/'
+        - '^\.claude/settings\.local\.json'

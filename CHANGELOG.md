@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.5.1 (2026-09-16)
+
+GuardSmith ランタイム成果物(`.guardsmith/` の CI 結果 JSON、`.claude/settings.local.json`)の
+commit/push 防止を仕組み化するリリース。既存 PJ の追随手順は docs/migration/v0.5.1.md を参照。
+
+### Added
+
+- baseline 新ルール: `hygiene/guardsmith-artifacts-ignored`(warn で開始)。
+  `.gitignore` に `.guardsmith/` と `.claude/settings.local.json` の除外行があることを検査
+  (CI 結果 JSON はリポジトリ名・ブランチ名・SHA 等の PJ 固有情報、settings.local.json は
+  hooks の URL/トークンを含むため)
+- `finish-task` スキル: コミット前チェックに「`.guardsmith/` / `.claude/settings.local.json` が
+  ステージに含まれていないことの確認」を追加
+
+### Changed
+
+- standards/docs/CI_CD.md: CI 結果 JSON の「リポジトリへのコミット/プッシュ禁止」を明文化
+- リモート参照タグ・生成物のスタンプを v0.5.1 に更新(baseline の drift source /
+  `guard new` の policy 生成 / docs 例示 / Action の `release-tag` 既定)
+- npm: `@guardsmith/core` / `@guardsmith/cli` は 0.3.0 に同梱(0.3.0 は未公開だったため据え置き)
+
 ## v0.5.0 (2026-09-16)
 
 標準の大規模刷新リリース(PR #3〜#7 を集約)。標準参照タグ(`STANDARDS_TAG`)を v0.5.0 に更新。

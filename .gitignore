@@ -11,5 +11,7 @@ packages/core/standards/
 release/
 # ローカル CI(make ci)の結果 JSON。コミットしない
 .guardsmith/
+# 外部ツール連携 hooks の URL・トークン(コミットしない)
+.claude/settings.local.json
 # Claude Code エージェントの一時 worktree
 .claude/worktrees/

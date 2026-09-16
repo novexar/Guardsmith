@@ -21,6 +21,8 @@ Novexar 標準の PR 手順。最上位ルールは `/CLAUDE.md`。
 3. **コミット**
    - 規約: `<type>: <要約>`(type: feat | fix | refactor | docs | test | chore | perf | ci)、本文に `Refs: #<issue>`。
    - デバッグ出力・秘密情報が残っていないか確認。
+   - `git status` で `.guardsmith/` と `.claude/settings.local.json` がステージに含まれていないことを確認する
+     (CI 結果 JSON はリポジトリ名・SHA 等の PJ 固有情報を含むためコミット禁止。含まれていたら .gitignore を確認)。
 
 4. **プッシュ**
    ```

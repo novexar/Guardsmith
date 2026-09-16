@@ -84,7 +84,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: novexar/Guardsmith@v0.5.0
+      - uses: novexar/Guardsmith@v0.5.1
 ```
 
 | Input              | Default                   | Description                                                                                                         |
@@ -103,7 +103,7 @@ A self-contained bundle (all dependencies included) is attached to every
 Node.js 20+ are required — the npm registry is never contacted:
 
 ```bash
-gh release download v0.5.0 --repo novexar/Guardsmith --pattern 'guardsmith-cli-*.tar.gz'
+gh release download v0.5.1 --repo novexar/Guardsmith --pattern 'guardsmith-cli-*.tar.gz'
 tar -xzf guardsmith-cli-*.tar.gz
 node guardsmith-cli/guard.mjs lint
 ```
@@ -119,9 +119,9 @@ A project policy is a few lines of YAML with pinned remote references:
 version: 1
 target: claude-code
 extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v0.5.0
+  - github:novexar/guardsmith//presets/baseline.yaml@v0.5.1
   # Projects with a frontend also add:
-  # - github:novexar/guardsmith//presets/frontend.yaml@v0.5.0
+  # - github:novexar/guardsmith//presets/frontend.yaml@v0.5.1
 rules: [] # add or override rules (redefining an id overrides it)
 exemptions: [] # time-boxed waivers: reason + approved_by + expires required
 ```

@@ -22,7 +22,7 @@ inputs:
   release-tag:
     description: "GuardSmith release tag to download the bundle from (used when source is 'release')"
     required: false
-    default: "v0.5.0"
+    default: "v0.5.1"
   guardsmith-token:
     description: >-
       Token used to fetch remote policy/standards repos referenced via

@@ -51,7 +51,11 @@ make ci-frontend  # フロントエンドのみ
 
 `make ci` は結果を `.guardsmith/ci-results/<UTCタイムスタンプ>.json` に出力し、
 同内容を `.guardsmith/ci-results/latest.json` にも書く(外部ツールは latest.json を読む)。
-`.guardsmith/` は `.gitignore` 済みでコミットしない。
+
+> **リポジトリへのコミット/プッシュ禁止**: `.guardsmith/` 配下の結果 JSON は
+> リポジトリ名・ブランチ名・コミット SHA 等の **PJ 固有情報**を含むため、リポジトリへ
+> コミット/プッシュしないこと。`.gitignore` で除外済みであり、baseline の
+> `hygiene/guardsmith-artifacts-ignored` が除外行の存在を検査する。
 
 スキーマ:
 

@@ -30,7 +30,7 @@ const VERSION = "0.3.0";
  * guard new が参照する標準(standards/ + baseline)のタグ。
  * npm パッケージ版(VERSION)とは独立に、標準の内容が変わったリリースでのみ上げる。
  */
-const STANDARDS_TAG = "0.5.0";
+const STANDARDS_TAG = "0.5.1";
 
 const INIT_TEMPLATE = `version: 1
 target: claude-code
