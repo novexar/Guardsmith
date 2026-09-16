@@ -30,7 +30,7 @@ function buildGood(root: string) {
   write(
     root,
     ".claude/agents/backend-engineer.md",
-    "---\nname: backend-engineer\ndescription: API実装担当\ntools: Read, Write, Bash\n---\n作業フロー\n",
+    "---\nname: backend-engineer\ndescription: API実装担当\nmodel: sonnet\ntools: Read, Write, Bash\n---\n作業フロー\n",
   );
   write(
     root,
@@ -60,11 +60,11 @@ function buildBad(root: string) {
     ".claude/agents/backend-engineer.md",
     "<!-- gen: 具体化せよ -->\n---\nname: backend-engineer\ndescription: {{BE_STACK}}担当\n---\n",
   );
-  // agent: frontmatterは正しいがtools欠落(frontmatterチェック単体の検証用)
+  // agent: frontmatterは正しいがtools欠落(frontmatterチェック単体の検証用)+ 日付付きmodel ID固定
   write(
     root,
     ".claude/agents/db-engineer.md",
-    "---\nname: db-engineer\ndescription: DB担当\n---\n作業フロー\n",
+    "---\nname: db-engineer\ndescription: DB担当\nmodel: claude-sonnet-5-20260101\n---\n作業フロー\n",
   );
   // シークレット混入 + 必須skill欠落
   write(root, ".claude/notes.md", 'api_key = "sk1234567890abcdefghij"\n');
@@ -97,6 +97,10 @@ describe("baseline: good fixture", () => {
 
   it("has zero warn (drift/skills-sync is info-skipped until github: fetch)", () => {
     expect(good.stats.warn).toBe(0);
+  });
+
+  it("does not flag alias model (agents/no-pinned-model)", () => {
+    expect(good.findings.filter((f) => f.ruleId === "agents/no-pinned-model")).toHaveLength(0);
   });
 });
 
@@ -143,6 +147,15 @@ describe("baseline: bad fixture", () => {
           f.message.includes("tools"),
       ),
     ).toBe(true);
+  });
+
+  it("detects pinned model id in agent", () => {
+    expect(
+      bad.findings.some(
+        (f) => f.ruleId === "agents/no-pinned-model" && f.file?.includes("db-engineer"),
+      ),
+    ).toBe(true);
+    expect(ids().filter((i) => i === "agents/no-pinned-model")).toHaveLength(1);
   });
 
   it("detects secret", () => {

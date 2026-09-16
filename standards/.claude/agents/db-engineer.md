@@ -19,6 +19,7 @@
 ---
 name: db-engineer
 description: {{PROJECT_NAME}} のデータベースエンジニア。{{DB_STACK_SHORT}} のスキーマ・マイグレーション・{{DB_FOCUS}} を設計/実装する。PM から委任されたスキーマ変更を {{MIGRATIONS_PATH}} で管理し PR を作成する。
+model: sonnet
 tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 

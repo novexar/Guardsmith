@@ -8,6 +8,7 @@
 ---
 name: frontend-engineer
 description: {{PROJECT_NAME}} のフロントエンド実装担当。{{FE_STACK_SHORT}} で機能実装と {{FE_TEST_RUNNER}} テストを行う。PM から委任された feature/bug を実装し PR を作成する。
+model: sonnet
 tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 

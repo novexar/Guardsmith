@@ -78,6 +78,15 @@ rules:
       required: [name, description, tools]
       schema: { name: "^[a-z][a-z0-9-]*$" }
 
+  # --- agents モデル固定禁止 (docs/AGENTS.md のポリシー) ---
+  - id: agents/no-pinned-model
+    severity: warn
+    description: agent定義に日付付きmodel IDをハードコードしない(エイリアスで最新版に解決させる)
+    check: content-match
+    with:
+      path: .claude/agents/*.md
+      must_not: ['model:\s*"?claude-[a-z0-9-]+-20\d{6}']
+
   # --- skills frontmatter ---
   - id: skills/frontmatter
     severity: error

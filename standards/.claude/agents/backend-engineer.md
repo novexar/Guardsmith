@@ -8,6 +8,7 @@
 ---
 name: backend-engineer
 description: {{PROJECT_NAME}} のバックエンド実装担当。{{BE_STACK_SHORT}} で API 実装と {{BE_TEST_RUNNER}} テストを行う。PM から委任された feature/bug を実装し PR を作成する。
+model: sonnet
 tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 

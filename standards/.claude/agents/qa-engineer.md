@@ -7,6 +7,8 @@
 ---
 name: qa-engineer
 description: {{PROJECT_NAME}} の QA・テストエンジニア。テスト設計、E2E({{E2E_TOOL}})、カバレッジ検証、回帰テストを担当。実装の品質を検証し不具合を Issue 化する。
+model: fable
+effort: high
 tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 
