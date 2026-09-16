@@ -70,6 +70,10 @@ rules:
         - CLAUDE.md
         - README.md
         - CONTRIBUTING.md
+        - SECURITY.md
+        - CHANGELOG.md
+        # ルート直下の日本語版(README.ja.md / CONTRIBUTING.ja.md / SECURITY.ja.md / CHANGELOG.ja.md)
+        - "*.ja.md"
         - ".claude/**"
         # Claude Code エージェントの一時 worktree(リポジトリ全体のコピーを含む)は対象外
         - "!.claude/worktrees/**"

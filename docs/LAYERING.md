@@ -1,26 +1,30 @@
-# GuardSmith レイヤリング設計 — overlay / extends の仕組み
+# GuardSmith Layering Design — how overlay / extends works
 
-「組織・クライアント固有の内容をprivateリポジトリのoverlayとしてextendsで被せる」の詳細説明。
+**English** | [日本語](LAYERING.ja.md)
 
-## 一言でいうと
+A detailed explanation of "overlay organization/client-specific content from a private
+repository on top of the OSS baseline via extends".
 
-**ポリシーとテンプレートを「公開してよい層」と「公開できない層」に分け、
-下の層を上の層が extends(継承+上書き)する3層構造**にする。CSSのカスケードと同じ発想。
+## In one sentence
+
+**Split policies and templates into a "publishable layer" and a "non-publishable layer",
+and let each upper layer extend (inherit + override) the one below** — a three-layer
+structure with the same idea as the CSS cascade.
 
 ```
-[Layer 1] guardsmith (OSS・public)
-    │  誰でも使える汎用ルール + 汎用テンプレート(標準の"本体")
-    │  例: baseline.yaml, standards/CLAUDE.md雛形, 汎用agents/skills
+[Layer 1] guardsmith (OSS, public)
+    │  Generic rules + generic templates anyone can use (the "body" of the standards)
+    │  e.g. baseline.yaml, the standards/CLAUDE.md skeleton, generic agents/skills
     ▼ extends
-[Layer 2] guardsmith-private (novexar・private)
-    │  Novexar/クライアント固有の追加ルール・上書き・固有テンプレート
-    │  例: 特定クライアントの命名規則、社内リポジトリ名の規約、NDA案件の禁止事項
+[Layer 2] guardsmith-private (novexar, private)
+    │  Novexar/client-specific additional rules, overrides, and templates
+    │  e.g. a client's naming conventions, internal repository naming rules, NDA prohibitions
     ▼ extends
-[Layer 3] 各プロジェクトリポジトリ (guard.policy.yaml)
-       そのPJ固有の微調整と期限付き例外(exemption)だけを書く
+[Layer 3] Each project repository (guard.policy.yaml)
+       Holds only project-specific tweaks and time-boxed exemptions
 ```
 
-## 具体例で理解する
+## Understanding by example
 
 ### Layer 1 (OSS) — presets/baseline.yaml
 
@@ -38,75 +42,86 @@ rules:
 version: 1
 target: claude-code
 extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v0.5.0 # ← Layer 1を継承
+  - github:novexar/guardsmith//presets/baseline.yaml@v0.5.0 # ← inherits Layer 1
 rules:
-  # 上書き: 社内では違反をerror扱いに格上げ (同じidで再定義=上書き)
+  # Override: escalate the violation to error in-house (redefining the same id = override)
   - id: claude-md/thin-diff
     severity: error
     check: max-lines
     with: { path: CLAUDE.md, limit: 120 }
-  # 追加: クライアントA案件の固有ルール (これは絶対に公開できない情報)
+  # Addition: a rule specific to client A's project (information that must never be published)
   - id: client-a/forbidden-terms
     severity: error
     check: content-match
     with:
       path: "docs/**/*.md"
-      must_not: ["(社外秘プロジェクトコード名の正規表現)"]
+      must_not: ["(regex for the confidential project code name)"]
 ```
 
-### Layer 3 (各PJ) — guard.policy.yaml
+### Layer 3 (each project) — guard.policy.yaml
 
 ```yaml
 version: 1
 target: claude-code
 extends:
   - github:novexar/guardsmith-private//novexar-overlay.yaml@v3
-rules: [] # 通常は空。PJ固有の追加があればここに
+rules: [] # usually empty; add project-specific rules here if needed
 exemptions:
   - rule: claude-md/thin-diff
-    reason: レガシー移行中のため手順併記が必要
+    reason: legacy migration in progress, extra steps must stay documented
     expires: 2026-12-31
     approved_by: tech-lead
 ```
 
-## マージの規則 (resolver実装済みの挙動)
+## Merge rules (behavior implemented in the resolver)
 
-1. extends を宣言順に読み込み、rules を **id をキーに** マージする
-2. 同じ id が再定義されたら **後勝ち**(Layer 3 > Layer 2 > Layer 1)
-3. exemptions は上書きではなく **連結**(どの層の例外も有効。ただし期限必須)
-4. リモート参照は **タグ固定必須**(@vX.Y.Z)。「標準が知らぬ間に変わった」を防ぐ
+1. Load `extends` in declaration order and merge `rules` **keyed by id**
+2. If the same id is redefined, **the later one wins** (Layer 3 > Layer 2 > Layer 1)
+3. `exemptions` are **concatenated**, not overridden (exemptions from any layer apply,
+   but an expiry date is mandatory)
+4. Remote references **require tag pinning** (@vX.Y.Z) — prevents "the standards changed
+   without anyone noticing"
 
-## なぜこの分割なのか
+## Why this split
 
-| 分け方            | 何が起きるか                                                                          |
-| ----------------- | ------------------------------------------------------------------------------------- |
-| 全部OSSに置く     | クライアント固有ルール(=案件情報)の公開事故。他社ユーザーにはノイズ                   |
-| 全部privateに置く | OSSとして公開・共有できず、コミュニティの改善も取り込めない                           |
-| **3層に分ける**   | OSSは誰でも使える汎用品として育ち、固有情報は一切公開されず、各PJは数行のYAMLだけ持つ |
+| Approach                | What happens                                                                                                                               |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Put everything in OSS   | Accidental publication of client-specific rules (= engagement information). Noise for other users                                          |
+| Put everything private  | Cannot be published or shared as OSS; community improvements cannot flow in                                                                |
+| **Split into 3 layers** | The OSS grows as a generic product anyone can use, private information is never published, and each project holds only a few lines of YAML |
 
-## テンプレート(standards/)も同じ構造
+## Templates (standards/) share the same structure
 
-ルールだけでなくテンプレートも同様:
+Not only rules — templates work the same way:
 
-- Layer 1: `standards/` の汎用雛形(CLAUDE.md、agents、skills) — 今回claude-standardsから移植したもの
-- Layer 2: private側に固有テンプレート(例: クライアントA向けagent)を置き、`guard sync` の
-  取得元を private に向ける(privateのstandardsはLayer 1をコピーして固有部分を追記した形で維持)
-- Layer 3: 各PJは `guard sync` で配布を受け、`## PJ固有手順` セクションだけ編集(drift検知の許可範囲)
+- Layer 1: the generic skeletons in `standards/` (CLAUDE.md, agents, skills) — ported
+  from claude-standards
+- Layer 2: place organization-specific templates (e.g. an agent for client A) on the
+  private side and point `guard sync` at it (the private standards are maintained as a
+  copy of Layer 1 with the specific parts appended)
+- Layer 3: each project receives the distribution via `guard sync` and edits only the
+  `## PJ固有手順` section (the range allowed by drift detection)
 
-## 運用フロー
+## Operational flow
 
-1. 標準を改訂 → Layer 1(または2)にコミットし、新タグを打つ(例: v0.3.0)
-2. 各PJの guard.policy.yaml の extends タグを上げるPRを作る(将来: `guard bump` で自動化)
-3. CIの `guard lint` が新標準への適合を検証。適合できない箇所は期限付きexemptionで猶予管理
+1. Revise the standards → commit to Layer 1 (or 2) and cut a new tag (e.g. v0.3.0)
+2. Open PRs that bump the extends tag in each project's guard.policy.yaml
+   (future: automated by `guard bump`)
+3. `guard lint` in CI verifies conformance to the new standards; places that cannot
+   conform yet are grace-managed with time-boxed exemptions
 
-## リモート取得の仕様
+## Remote fetch specification
 
-- `extends: github:owner/repo[//path]@tag` / drift `source: github:owner/repo[//path]@tag` が動作する
-  - `//path` 省略時: extends はリポジトリルートの `guard.policy.yaml`、drift はリポジトリルートを参照
-  - drift の `//path` はマスターがサブディレクトリの場合に指定(例: `github:novexar/guardsmith//standards@v0.5.0`)
-- 取得方式: codeload.github.com の tarball(タグ固定)。private リポジトリは `GITHUB_TOKEN` 環境変数で認証
-- キャッシュ: `~/.guardsmith/cache/<owner>/<repo>/<tag>/`。タグは不変前提で再取得しない。
-  `guard lint --no-cache` で強制再取得
-- extends は**多段解決**される(Layer 3 → Layer 2 → Layer 1 のチェーンが1コマンドで効く)。循環はエラー
-- セキュリティ: tarball 展開時にパストラバーサル(`..`・絶対パス)とリンク系エントリを拒否。
-  `//path` のキャッシュ外参照も遮断
+- `extends: github:owner/repo[//path]@tag` and drift `source: github:owner/repo[//path]@tag` work
+  - When `//path` is omitted: extends refers to `guard.policy.yaml` at the repository
+    root, drift refers to the repository root
+  - Specify drift's `//path` when the master lives in a subdirectory
+    (e.g. `github:novexar/guardsmith//standards@v0.5.0`)
+- Fetch method: tarball from codeload.github.com (tag-pinned). Private repositories
+  authenticate via the `GITHUB_TOKEN` environment variable
+- Cache: `~/.guardsmith/cache/<owner>/<repo>/<tag>/`. Tags are assumed immutable, so no
+  re-fetch. Force a re-fetch with `guard lint --no-cache`
+- `extends` resolves **multi-level** (the Layer 3 → Layer 2 → Layer 1 chain works in a
+  single command). Cycles are an error
+- Security: tarball extraction rejects path traversal (`..`, absolute paths) and link
+  entries. `//path` references outside the cache are also blocked

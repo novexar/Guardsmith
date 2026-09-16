@@ -148,10 +148,22 @@ exemptions: [] # 期限付き例外(reason + approved_by + expires 必須)
 ## 標準のアップグレード
 
 既存プロジェクトはタグ固定のため、何もしなくても壊れません。新しい標準リリースへ追随する
-際は [docs/migration/v0.5.0.md](docs/migration/v0.5.0.md) のチェックリストに従ってください
+際は [docs/migration/v0.5.0.ja.md](docs/migration/v0.5.0.ja.md) のチェックリストに従ってください
 ——各項目は任意・独立で、段階適用できます。
+
+## 謝辞・クレジット
+
+- [awesome-design-md-jp](https://github.com/kzhrknt/awesome-design-md-jp)(MIT)—
+  standards/DESIGN.md テンプレートのベース
+- [ponytail](https://github.com/DietrichGebert/ponytail)(MIT)— 標準に組み込んでいる
+  過剰実装抑制プラグイン
+- 標準スタックとして参照・推奨しているエコシステムへの敬意: shadcn/ui、Tremor、
+  TanStack(Router/Query/Table)、Tailwind CSS、cmdk — コードの同梱はなく、
+  各 PJ が各自のライセンスで導入します
+- 主要ランタイム依存: zod、yaml、fast-glob、jsonpath-plus、node-tar — 各パッケージの
+  ライセンスに基づき利用(オフラインバンドルには `THIRD-PARTY-NOTICES.md` を同梱)
 
 ## ライセンス・コントリビュート
 
 [Apache-2.0](LICENSE)。Issue・PR を歓迎します。開発フローは
-[CONTRIBUTING.md](CONTRIBUTING.md) を参照してください。
+[CONTRIBUTING.ja.md](CONTRIBUTING.ja.md) を参照してください。

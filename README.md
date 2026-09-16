@@ -153,6 +153,18 @@ Existing projects are tag-pinned and keep working untouched. When you are ready 
 new standards release, follow the step-by-step checklist in
 [docs/migration/v0.5.0.md](docs/migration/v0.5.0.md) — every step is optional and independent.
 
+## Acknowledgements
+
+- [awesome-design-md-jp](https://github.com/kzhrknt/awesome-design-md-jp) (MIT) — the base
+  of the standards/DESIGN.md template
+- [ponytail](https://github.com/DietrichGebert/ponytail) (MIT) — the over-implementation
+  restraint plugin built into the standards
+- With respect to the ecosystems the standards reference and recommend: shadcn/ui, Tremor,
+  TanStack (Router/Query/Table), Tailwind CSS, cmdk — no code is bundled; each project
+  adopts them under their own licenses
+- Key runtime dependencies: zod, yaml, fast-glob, jsonpath-plus, node-tar — used under
+  each package's license (the offline bundle ships with a `THIRD-PARTY-NOTICES.md`)
+
 ## License & contributing
 
 [Apache-2.0](LICENSE). Issues and PRs are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md)

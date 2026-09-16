@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  English | <a href="https://github.com/novexar/Guardsmith/blob/main/README.ja.md">日本語</a>
+  English | <a href="https://github.com/novexar/Guardsmith/blob/main/packages/core/README.ja.md">日本語</a>
 </p>
 
 ---

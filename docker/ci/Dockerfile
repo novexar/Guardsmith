@@ -1,6 +1,6 @@
 # GuardSmith 自身のローカル CI 用イメージ(Node 22 + pnpm 10)
 # ビルド時に依存導入まで済ませ、各 CI ジョブ(lint / typecheck / test / guard lint)は
-# `docker run` で実行する(Makefile の make ci が入口。docs/decisions/0001-hybrid-ci.md 参照)
+# `docker run` で実行する(Makefile の make ci が入口。CONTRIBUTING.md の CI 節を参照)
 FROM node:22-slim
 
 # GitHub Actions(pnpm/action-setup version: 10)と同じく pnpm v10 系の最新を使う。

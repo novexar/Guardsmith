@@ -1,6 +1,8 @@
 # GuardSmith frontend preset — ダッシュボード系 UI を持つ PJ 向けの追加ルールセット
 # 対象: standards/docs/FRONTEND_STANDARDS.md の標準スタックを採用する PJ
-# baseline.yaml には含めない(BE のみの PJ が誤警告を受けないための分離。docs/decisions/0002 参照)。
+# baseline.yaml には含めない: lint エンジンに「FE がある場合のみ適用」の条件付きルールは無く、
+# baseline に入れると BE のみの PJ が常に誤警告を受けるため、別プリセットに分離している。
+# FE を持つ PJ だけが extends に本プリセットを追加する。
 # 使い方: FE を持つ PJ の guard.policy.yaml の extends に baseline と併せて追加する
 #   - ローカル参照:  preset:frontend
 #   - リモート参照:  github:novexar/guardsmith//presets/frontend.yaml@vX.Y.Z(タグ固定必須)

@@ -8,7 +8,7 @@
 - **オーナー**: Novexar
 - **リポジトリ**: novexar/Guardsmith(単一システム・pnpm workspace)
 - **目的**: AIコーディング標準(CLAUDE.md / agents / skills)の配布と機械検証。「ESLint + 公式config」の関係をAI開発標準に対して提供する
-- **ドキュメント言語**: 原則 日本語(技術用語・コード・識別子は英語のまま)
+- **ドキュメント言語**: 原則 日本語(技術用語・コード・識別子は英語のまま)。ただし公開ドキュメント(README / docs / CONTRIBUTING / SECURITY / CHANGELOG)は英語主体とし、同名 `.ja.md` の日本語版を併設する
 
 ## 技術スタック
 

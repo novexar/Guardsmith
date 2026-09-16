@@ -1,4 +1,4 @@
-# メンテナ自身の CI はローカル Docker(make ci — docs/decisions/0001-hybrid-ci.md)。
+# メンテナ自身の CI はローカル Docker(make ci — CONTRIBUTING.md 参照)。
 # この workflow は外部コントリビュータ(fork)からの PR 検証専用で、
 # 同一リポジトリのブランチからの PR では実行されない。
 name: External PR CI

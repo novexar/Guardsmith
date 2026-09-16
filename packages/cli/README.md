@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  English | <a href="https://github.com/novexar/Guardsmith/blob/main/README.ja.md">日本語</a>
+  English | <a href="https://github.com/novexar/Guardsmith/blob/main/packages/cli/README.ja.md">日本語</a>
 </p>
 
 ---
@@ -97,3 +97,6 @@ run entirely from the self-contained bundle attached to
 ## License
 
 Apache-2.0
+
+Third-party licenses: dependencies carry their own licenses via npm; the offline release
+bundle ships with a `THIRD-PARTY-NOTICES.md`.
