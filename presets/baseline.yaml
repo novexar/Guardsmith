@@ -108,6 +108,15 @@ rules:
       paths: [".claude/skills/**"]
       allow_sections: ["## PJ固有手順"]
 
+  # --- CI/CD 方針 (docs/CI_CD.md: CI はローカル Docker、Actions は main push の deploy のみ) ---
+  - id: ci/no-remote-test-workflows
+    severity: warn
+    description: GitHub Actions にテスト系ワークフローを置かない(CI はローカル Docker。Actions は deploy のみ)
+    check: content-match
+    with:
+      path: .github/workflows/*.yml
+      must_not: ['\bpull_request\b', "pnpm test", "npm test", "pytest", "vitest"]
+
   # --- セキュリティ ---
   - id: security/no-secrets-in-context
     severity: error

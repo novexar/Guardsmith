@@ -46,6 +46,7 @@
 | Lint | {{FE_LINT}} | {{BE_LINT}} |
 | テスト | {{FE_TEST}} | {{BE_TEST}} |
 | ビルド | {{FE_BUILD}} | — |
+| CI(Docker) | `make ci`(ルートで実行。詳細: @docs/CI_CD.md) | 同左 |
 
 ## ブランチ戦略
 <!-- gen: モノレポなら develop-<system> 階層を含む標準形、単一システムなら main/develop/feature の3層。詳細は docs/BRANCHING_STRATEGY.md に生成し、ここには図と昇格ルールのみ -->

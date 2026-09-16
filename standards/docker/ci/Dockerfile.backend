@@ -1,0 +1,18 @@
+# gen: バックエンド CI 用イメージ雛形(init-project で PJ のスタックへ具体化する)
+# gen: 既定は Python 3.12-slim。BE スタックが Python 以外なら FROM ごと差し替える
+#      (例: Node なら node:22-slim、Go なら golang:1.23)。BE 自体が無い PJ は
+#      本ファイルと docker-compose.ci.yml の backend-ci サービスを削除する。
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# gen: 依存導入。CLAUDE.md「よく使うコマンド」表の {{BE_INSTALL}} と一致させる。
+#      build context はリポジトリルート(docker-compose.ci.yml 参照)。依存マニフェスト
+#      (requirements.txt / pyproject.toml 等)のみを先に COPY してレイヤーキャッシュを
+#      効かせる。ソース本体は docker-compose.ci.yml が bind mount する。
+COPY {{BE_DIR}}/requirements.txt ./
+RUN {{BE_INSTALL}}
+
+# gen: lint / test の実行コマンドは docker-compose.ci.yml(backend-ci サービスの command)側で
+#      {{BE_LINT}} / {{BE_TEST}} を具体化する。ここでは既定コマンドのみ置く。
+CMD ["bash", "-lc", "{{BE_LINT}} && {{BE_TEST}}"]

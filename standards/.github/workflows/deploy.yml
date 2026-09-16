@@ -1,0 +1,21 @@
+# gen: デプロイ先確定時に実装する(認証 → ビルド → デプロイ)。
+#      テスト系ステップをここに足さないこと(CI はローカル Docker — `make ci`。
+#      GitHub Actions は main への push 時の deploy のみ。詳細: docs/CI_CD.md)
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # gen: デプロイ先未定のため no-op。確定後にこのステップを実処理へ置き換える
+      - name: Deploy (placeholder)
+        run: |
+          echo "デプロイ先が未確定のため、このジョブは no-op です。"
+          echo "確定後の実装手順(gen): 1) デプロイ先の認証(Secrets) 2) 成果物ビルド 3) デプロイ実行"
+          echo "注意: テスト系ステップは追加しない(CI はローカル Docker: make ci)"

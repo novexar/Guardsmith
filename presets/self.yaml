@@ -71,6 +71,8 @@ rules:
         - README.md
         - CONTRIBUTING.md
         - ".claude/**"
+        # Claude Code エージェントの一時 worktree(リポジトリ全体のコピーを含む)は対象外
+        - "!.claude/worktrees/**"
         - "docs/**"
         - "presets/**"
         - "standards/**"

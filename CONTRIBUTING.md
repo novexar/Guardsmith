@@ -18,10 +18,20 @@ pnpm guard lint        # セルフ検査 (dogfooding)
 ## 変更の流れ
 
 1. Issue を立てて方針を合意する(小さな修正は PR 直行で可)
-2. `feature/<topic>` または `fix/<topic>` ブランチを作成
+2. `develop` 起点で `feature/<topic>` または `fix/<topic>` ブランチを作成(`feature/*` → `develop` → `main`)
 3. テストを先に書く(TDD)。カバレッジ 80% 以上を維持
 4. Conventional Commits 形式でコミット(`feat:` / `fix:` / `docs:` / `test:` / `chore:` など)
 5. PR を作成。CI(lint / typecheck / test / guard lint)が全て GREEN であること
+
+## CI(ハイブリッド方式 — docs/decisions/0001-hybrid-ci.md)
+
+- **PR 前に `make ci`(Docker ローカル CI)の通過が必須**。lint / typecheck / test:coverage /
+  guard lint を Docker コンテナ内で一括実行し、結果 JSON を `.guardsmith/ci-results/` に出力する
+  (前提: GNU make + bash + Docker。Windows は Git Bash / WSL から実行)
+- **外部コントリビュータ(fork からの PR)** は GitHub Actions(External PR CI)が同じ検証を
+  自動実行するため、Docker 環境が無くても PR を送れる(ローカルで `pnpm lint` などを
+  個別実行しての事前確認は推奨)
+- メンテナ自身(同一リポジトリのブランチ)の PR では GitHub Actions は実行されない
 
 ## ルール追加・変更時の注意
 

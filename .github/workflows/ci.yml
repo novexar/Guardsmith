@@ -1,12 +1,15 @@
-name: CI
+# メンテナ自身の CI はローカル Docker(make ci — docs/decisions/0001-hybrid-ci.md)。
+# この workflow は外部コントリビュータ(fork)からの PR 検証専用で、
+# 同一リポジトリのブランチからの PR では実行されない。
+name: External PR CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
 
 jobs:
   ci:
+    # fork からの PR のみ実行(自リポジトリのブランチ PR ではスキップ)
+    if: github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

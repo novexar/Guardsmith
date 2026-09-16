@@ -1,0 +1,17 @@
+# docker/ci/Dockerfile のビルドコンテキスト除外(ホスト固有物・生成物を持ち込まない)
+.git
+# Claude Code エージェントの一時 worktree(ホスト環境固有。CI 対象外)
+.claude/worktrees
+node_modules
+**/node_modules
+coverage
+release
+dist
+**/dist
+*.tgz
+*.log
+report.sarif
+.guardsmith
+# prepack が同梱するアセットコピー(マスターはリポジトリルート)
+packages/core/presets
+packages/core/standards

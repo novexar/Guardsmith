@@ -14,8 +14,9 @@ Novexar 標準の PR 手順。最上位ルールは `/CLAUDE.md`。
    - 指摘があれば修正してから次へ進む。テスト・境界検証・セキュリティ・a11y は削減対象外。
 
 2. **セルフ品質ゲート(PR 前必須)**
-   - 実行コマンドは **CLAUDE.md「よく使うコマンド」表に従う**(Lint / 型チェック / テスト / ビルド)。
-   - 失敗があれば修正してから次へ。テストカバレッジ 80%+ を確認。
+   - `make ci`(Docker ローカル CI)を実行する。**失敗したらタスク完了扱いにせず**、修正して再実行する。
+   - 結果 JSON が `.guardsmith/ci-results/`(latest.json)に出力されることを確認する(詳細: docs/CI_CD.md)。
+   - 個別コマンドの内訳は CLAUDE.md「よく使うコマンド」表を参照(Docker CI が正)。テストカバレッジ 80%+ を確認。
 
 3. **コミット**
    - 規約: `<type>: <要約>`(type: feat | fix | refactor | docs | test | chore | perf | ci)、本文に `Refs: #<issue>`。

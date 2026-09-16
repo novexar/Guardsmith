@@ -27,7 +27,8 @@ description: マスターテンプレートからコピーされた本リポジ�
 | `/CLAUDE.md` | プレースホルダ置換、未初期化警告ブロック削除。**末尾の standards バージョンコメントは維持** |
 | `docs/*.md` | 各雛形を具体化(REQUIREMENTS / ARCHITECTURE / CODING_STANDARDS / DEVELOPMENT_WORKFLOW) |
 | `.claude/agents/*.md` | 手順1で決めた構成のみ残して具体化。**不要なエージェントはファイルごと削除** |
-| `.github/` | Issue / PR テンプレのラベル・項目を PJ に合わせ微調整(原則そのまま) |
+| `.github/` | Issue / PR テンプレのラベル・項目を PJ に合わせ微調整(原則そのまま)。workflows/deploy.yml はデプロイ先確定まで no-op のまま(**テスト系ワークフローを追加しない**) |
+| `docker/ci/*` / `docker-compose.ci.yml` / `Makefile` | ローカル CI 構成を PJ のスタックへ具体化(FE / BE の片方しか無い PJ は不要なサービス・Dockerfile・ターゲットを削除)。具体化後に `make ci` が通ることを確認する |
 
 - エージェントの「作業フロー」「共通規約」「原則」など Novexar 標準と明記された節は**削除・緩和・改変禁止**(PJ 固有の追記は可)。
 - モノレポの場合、`.claude/templates/CLAUDE.system.md` は `new-system` スキルが使うため残す。単一システムなら削除してよい。
@@ -46,6 +47,7 @@ description: マスターテンプレートからコピーされた本リポジ�
 - [ ] CLAUDE.md の未初期化警告ブロックが削除され、末尾に `standards: novexar/claude-standards v` コメントが残っている
 - [ ] CLAUDE.md に契約見出し「技術スタック」「よく使うコマンド」「ブランチ戦略」「PJ固有ルール」が全て存在する
 - [ ] 「よく使うコマンド」表のコマンドを実際に実行し、全てエラーなく動作する(scaffold 済みの場合)
+- [ ] `make ci` が全ジョブ成功で完走し、`.guardsmith/ci-results/latest.json` が生成される(scaffold 済みの場合)
 - [ ] CLAUDE.md が 120 行以内(超える場合は docs/ へ退避して @参照に置換)
 - [ ] 各エージェントの Novexar 標準節が雛形から緩和されていない(目視確認)
 - [ ] 不要エージェント・不要テンプレが削除されている

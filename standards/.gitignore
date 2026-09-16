@@ -7,6 +7,8 @@ __pycache__/
 .env.*
 !.env.example
 coverage/
+# ローカル CI の結果 JSON(コミットしない。外部ツールはローカルで読む)
+.guardsmith/
 .claude/settings.local.json
 .claude/worktrees/
 .DS_Store

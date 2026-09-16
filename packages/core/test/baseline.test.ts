@@ -44,6 +44,12 @@ function buildGood(root: string) {
   );
   write(root, "docs/overview.md", "docs\n");
   write(root, ".claude/settings.json", `{"permissions":{"allow":["npm test"]}}`);
+  // deploy.yml 相当(push main のみ・テスト系ステップ無し)は ci/no-remote-test-workflows に検出されない
+  write(
+    root,
+    ".github/workflows/deploy.yml",
+    "name: Deploy\non:\n  push:\n    branches: [main]\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo deploy placeholder\n",
+  );
 }
 
 function buildBad(root: string) {
@@ -69,6 +75,12 @@ function buildBad(root: string) {
   // シークレット混入 + 必須skill欠落
   write(root, ".claude/notes.md", 'api_key = "sk1234567890abcdefghij"\n');
   rmSync(join(root, ".claude/skills/finish-task"), { recursive: true });
+  // リモートCI違反: pull_request トリガー + テストコマンド(ci/no-remote-test-workflows)
+  write(
+    root,
+    ".github/workflows/test.yml",
+    "name: Test\non:\n  pull_request:\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: pnpm test\n",
+  );
 }
 
 let goodRoot: string;
@@ -101,6 +113,10 @@ describe("baseline: good fixture", () => {
 
   it("does not flag alias model (agents/no-pinned-model)", () => {
     expect(good.findings.filter((f) => f.ruleId === "agents/no-pinned-model")).toHaveLength(0);
+  });
+
+  it("does not flag deploy-only workflow (ci/no-remote-test-workflows)", () => {
+    expect(good.findings.filter((f) => f.ruleId === "ci/no-remote-test-workflows")).toHaveLength(0);
   });
 });
 
@@ -160,6 +176,16 @@ describe("baseline: bad fixture", () => {
 
   it("detects secret", () => {
     expect(ids()).toContain("security/no-secrets-in-context");
+  });
+
+  it("detects remote test workflow (pull_request trigger + test command)", () => {
+    const hits = bad.findings.filter(
+      (f) => f.ruleId === "ci/no-remote-test-workflows" && f.file?.includes("test.yml"),
+    );
+    // \bpull_request\b / pnpm test / npm test(pnpm test の部分一致)の3パターンが検出される
+    // (deploy.yml 相当が検出されないことは good 側で検証)
+    expect(hits).toHaveLength(3);
+    expect(hits.every((f) => f.severity === "warn")).toBe(true);
   });
 
   it("detects missing standards version", () => {

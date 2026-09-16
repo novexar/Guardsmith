@@ -1,0 +1,18 @@
+# gen: フロントエンド CI 用イメージ雛形(init-project で PJ のスタックへ具体化する)
+# gen: 既定は Node 22-slim。FE 自体が無い PJ は本ファイルと docker-compose.ci.yml の
+#      frontend-ci サービスを削除する。
+FROM node:22-slim
+
+WORKDIR /app
+
+# gen: 依存導入。CLAUDE.md「よく使うコマンド」表の {{FE_INSTALL}} と一致させる。
+#      build context はリポジトリルート(docker-compose.ci.yml 参照)。パッケージ
+#      マニフェスト(package.json + lockfile)のみを先に COPY してレイヤーキャッシュを
+#      効かせる。ソース本体は docker-compose.ci.yml が bind mount し、node_modules は
+#      コンテナ内のものを匿名ボリュームで維持する。
+COPY {{FE_DIR}}/package.json {{FE_DIR}}/package-lock.json ./
+RUN {{FE_INSTALL}}
+
+# gen: lint / test の実行コマンドは docker-compose.ci.yml(frontend-ci サービスの command)側で
+#      {{FE_LINT}} / {{FE_TEST}} を具体化する。ここでは既定コマンドのみ置く。
+CMD ["bash", "-lc", "{{FE_LINT}} && {{FE_TEST}}"]

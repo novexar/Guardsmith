@@ -1,0 +1,26 @@
+# gen: ローカル CI 用 compose 定義(init-project で PJ のスタックへ具体化する)
+# gen: FE / BE の片方しか無い PJ は、不要なサービスと対応する docker/ci/Dockerfile.* を削除する。
+#      {{FE_DIR}} / {{BE_DIR}} は CLAUDE.md「よく使うコマンド」表のディレクトリと一致させる。
+# 実行は Makefile(make ci / ci-backend / ci-frontend)経由を正とする。詳細: docs/CI_CD.md
+services:
+  backend-ci:
+    build:
+      context: .
+      dockerfile: docker/ci/Dockerfile.backend
+    # gen: ソースは bind mount(イメージ再ビルド無しで最新ソースを検査する)
+    volumes:
+      - ./{{BE_DIR}}:/app
+    working_dir: /app
+    # gen: {{BE_LINT}} / {{BE_TEST}} を CLAUDE.md「よく使うコマンド」表のコマンドで置換する
+    command: ["bash", "-lc", "{{BE_LINT}} && {{BE_TEST}}"]
+
+  frontend-ci:
+    build:
+      context: .
+      dockerfile: docker/ci/Dockerfile.frontend
+    volumes:
+      - ./{{FE_DIR}}:/app
+      # gen: ホスト側 node_modules を持ち込まない(コンテナ内 install を優先する匿名ボリューム)
+      - /app/node_modules
+    working_dir: /app
+    command: ["bash", "-lc", "{{FE_LINT}} && {{FE_TEST}}"]
