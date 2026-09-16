@@ -1,16 +1,38 @@
-# @guardsmith/core
+<p align="center">
+  <img src="https://raw.githubusercontent.com/novexar/Guardsmith/main/assets/logo.png" width="96" alt="GuardSmith logo">
+</p>
 
-**GuardSmith のルールエンジン + CLI 本体。** ポリシー(YAML)のスキーマ検証、8種の check
-(file-exists / file-absent / content-match / max-lines / frontmatter / json-path / drift / secret-scan)、
-`github:` リモート参照の解決(タグ固定・キャッシュ・パストラバーサル対策)、SARIF 出力を提供します。
+<h1 align="center">@guardsmith/core</h1>
 
-_English follows Japanese._
+<p align="center">
+  The rule engine behind <a href="https://github.com/novexar/Guardsmith">GuardSmith</a> —
+  policy validation, 8 check types, tag-pinned remote resolution, and SARIF output.
+</p>
 
-> **CLI として使う場合は [`@guardsmith/cli`](https://www.npmjs.com/package/@guardsmith/cli) を
-> インストールしてください**(本パッケージはエンジンです。`@guardsmith/cli` の実体は本パッケージの
-> `runCli()` への薄いラッパーです)。
+<p align="center">
+  English | <a href="https://github.com/novexar/Guardsmith/blob/main/README.ja.md">日本語</a>
+</p>
 
-## ライブラリとして使う
+---
+
+> **Looking for the CLI?** Install
+> [`@guardsmith/cli`](https://www.npmjs.com/package/@guardsmith/cli) instead — it is a thin
+> wrapper around this package. Install `@guardsmith/core` directly only if you want to embed
+> the engine in your own tool.
+
+## What it provides
+
+- **Policy schema** — strict zod validation of `guard.policy.yaml` / preset YAML
+  (unknown keys are rejected; typos become errors)
+- **8 check types** — file-exists / file-absent / content-match / max-lines / frontmatter /
+  json-path / drift / secret-scan
+- **Remote resolution** — `extends: github:owner/repo[//path]@tag` with mandatory tag pinning,
+  local caching, multi-level composition, cycle detection, and path-traversal hardening
+- **Reporting** — console formatter and SARIF 2.1.0 output
+- Ships the standard rulesets (`presets/baseline.yaml`, `presets/frontend.yaml`) and the
+  standards master (`standards/`) used by `guard new`
+
+## Use as a library
 
 ```ts
 import { parsePolicy, runLint, formatConsole } from "@guardsmith/core";
@@ -21,55 +43,18 @@ const parsed = parsePolicy(parse(readFileSync("guard.policy.yaml", "utf8")));
 if (parsed.ok) {
   const result = await runLint(parsed.policy, process.cwd());
   console.log(formatConsole(result));
+  process.exitCode = result.ok ? 0 : 1;
 }
 ```
 
-主なエクスポート:
-
-| エクスポート                            | 説明                                                            |
-| --------------------------------------- | --------------------------------------------------------------- |
-| `parsePolicy` / `PolicyDocument`        | ポリシーのスキーマ検証(zod。未知キーは拒否)                     |
-| `Rule` / `Exemption` / `Severity`       | スキーマ部品(利用側で独自ポリシーを合成する際に再利用可)        |
-| `runLint` / `formatConsole` / `toSarif` | 検査の実行と出力                                                |
-| `loadPolicy`                            | `extends`(preset: / file: / github:)の多段解決込みの読み込み    |
-| プリセット同梱                          | `presets/baseline.yaml`(生成PJ向け)/ `standards/`(配布マスター) |
-
-## ドキュメント
-
-- リポジトリ / 導入ガイド: https://github.com/novexar/Guardsmith
-
----
-
-# English
-
-**The GuardSmith rule engine + CLI core.** Provides policy (YAML) schema validation,
-8 check types (file-exists / file-absent / content-match / max-lines / frontmatter /
-json-path / drift / secret-scan), `github:` remote reference resolution (tag-pinned,
-cached, path-traversal hardened), and SARIF output.
-
-> **If you want the CLI, install [`@guardsmith/cli`](https://www.npmjs.com/package/@guardsmith/cli)
-> instead** — it is a thin wrapper around this package's `runCli()`.
-
-## Use as a library
-
-```ts
-import { parsePolicy, runLint, formatConsole } from "@guardsmith/core";
-
-const parsed = parsePolicy(yamlDocument);
-if (parsed.ok) {
-  const result = await runLint(parsed.policy, process.cwd());
-  console.log(formatConsole(result));
-}
-```
-
-Key exports: `parsePolicy` / `PolicyDocument` (strict zod schema), reusable schema parts
-(`Rule`, `Exemption`, `Severity`), `runLint` / `formatConsole` / `toSarif`, and `loadPolicy`
-(multi-level `extends` resolution across `preset:` / `file:` / `github:` refs). The package
-ships `presets/baseline.yaml` and the `standards/` distribution master.
+Key exports: `parsePolicy` / `PolicyDocument`, reusable schema parts (`Rule`, `Exemption`,
+`Severity`) for composing your own policy documents, `runLint` / `formatConsole` / `toSarif`,
+and `loadPolicy` (multi-level `extends` resolution across `preset:` / `file:` / `github:` refs).
 
 ## Documentation
 
-- Repository / getting started: https://github.com/novexar/Guardsmith
+- Getting started & concepts: https://github.com/novexar/Guardsmith
+- 3-layer policy design: https://github.com/novexar/Guardsmith/blob/main/docs/LAYERING.md
 
 ## License
 

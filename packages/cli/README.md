@@ -1,87 +1,24 @@
-# @guardsmith/cli
+<p align="center">
+  <img src="https://raw.githubusercontent.com/novexar/Guardsmith/main/assets/logo.png" width="96" alt="GuardSmith logo">
+</p>
 
-**AI開発標準の配布と統制を1つにしたガバナンスツールキット GuardSmith の CLI(`guard` コマンド)。**
-標準(CLAUDE.md / agents / skills のテンプレート)を配り、守られているかを機械検証します —
-「ESLint + 公式config」の関係を AI コーディング標準に対して提供します。
+<h1 align="center">@guardsmith/cli</h1>
 
-_English follows Japanese._
+<p align="center">
+  Ship the same AI coding standards to every repository — and <b>machine-verify</b> they are followed.<br>
+  The <code>guard</code> command of <a href="https://github.com/novexar/Guardsmith">GuardSmith</a>.
+</p>
 
-## インストール
-
-```bash
-npx @guardsmith/cli <command>      # 都度実行
-# または
-pnpm add -D @guardsmith/cli        # プロジェクトに導入して pnpm guard <command>
-```
-
-Node.js 20 以上が必要です。
-
-## クイックスタート
-
-```bash
-# 新規プロジェクト: 標準雛形(CLAUDE.md / agents / skills / docs)から展開
-npx @guardsmith/cli new my-project
-
-# 既存プロジェクト: 検証ポリシーだけ生成
-npx @guardsmith/cli init
-
-# 検証(プレースホルダ残置・契約見出し欠落・資格情報混入などを検出。exit 1 = error)
-npx @guardsmith/cli lint
-
-# 配布ファイルのマスター乖離(drift)を確認 → 復元
-npx @guardsmith/cli sync           # dry-run
-npx @guardsmith/cli sync --write   # 適用
-
-# ルールの意図を表示
-npx @guardsmith/cli explain claude-md/thin-diff
-```
-
-## ポリシー(guard.policy.yaml)
-
-```yaml
-version: 1
-target: claude-code
-extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v0.5.0 # タグ固定必須
-rules: [] # 追加・上書き(同idで再定義=上書き)
-exemptions: [] # 期限付き例外(expires + approved_by 必須。期限切れは error)
-```
-
-`extends: github:owner/repo[//path]@tag` により OSS baseline → 組織 private overlay → 各プロジェクト
-の3層合成ができます。private リポジトリは `GITHUB_TOKEN` 環境変数で取得します。
-
-## CI(GitHub Action)
-
-```yaml
-# .github/workflows/guard.yml
-name: GuardSmith
-on: [pull_request]
-permissions:
-  contents: read
-  pull-requests: write
-jobs:
-  guard:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: novexar/Guardsmith@v0.5.0
-```
-
-違反があるとジョブが失敗し、レポートが Job Summary と PR コメントに載ります(SARIF 出力対応)。
-
-## ドキュメント
-
-- リポジトリ / 導入ガイド: https://github.com/novexar/Guardsmith
-- 3層 overlay 設計: https://github.com/novexar/Guardsmith/blob/main/docs/LAYERING.md
+<p align="center">
+  English | <a href="https://github.com/novexar/Guardsmith/blob/main/README.ja.md">日本語</a>
+</p>
 
 ---
 
-# English
+GuardSmith treats AI development standards (`CLAUDE.md`, agents, skills) the way ESLint
+treats code style: **a distributable config plus a linter**. This package provides the CLI.
 
-**CLI (`guard`) for GuardSmith — a governance toolkit that unifies distribution and
-enforcement of AI development standards.** It distributes standards (templates for
-`CLAUDE.md` / agents / skills) and machine-verifies that projects follow them — the
-"ESLint + official config" relationship, applied to AI coding standards.
+Requires Node.js 20+.
 
 ## Install
 
@@ -91,35 +28,71 @@ npx @guardsmith/cli <command>      # one-off
 pnpm add -D @guardsmith/cli        # per project, then: pnpm guard <command>
 ```
 
-Requires Node.js 20+.
-
 ## Quick start
 
 ```bash
-npx @guardsmith/cli new my-project   # scaffold a new project from the standards master
-npx @guardsmith/cli init             # existing project: generate guard.policy.yaml only
-npx @guardsmith/cli lint             # verify (exit 1 = errors found)
-npx @guardsmith/cli sync             # show drift against the master (dry-run)
-npx @guardsmith/cli sync --write     # repair drift
-npx @guardsmith/cli explain <rule>   # explain a rule
+# New project — scaffold from the standards master
+# (CLAUDE.md, agents, skills, docs, Docker-based local CI, design spec)
+npx @guardsmith/cli new my-project
+
+# Existing project — generate the policy file only
+npx @guardsmith/cli init
+
+# Verify (exit 1 = violations found: uninitialized templates,
+# broken contract headings, leaked credentials, drift, ...)
+npx @guardsmith/cli lint
+
+# Show drift against the standards master, then repair it
+npx @guardsmith/cli sync           # dry-run
+npx @guardsmith/cli sync --write   # restore (project-owned sections are preserved)
+
+# Explain a rule / show versions
+npx @guardsmith/cli explain claude-md/thin-diff
+npx @guardsmith/cli version
 ```
 
-## Policy (guard.policy.yaml)
+After `guard new`, open the project with Claude Code — the bundled `init-project` skill
+interviews you and concretizes the templates. `guard lint` passes once initialization
+is genuinely complete.
 
-`extends: github:owner/repo[//path]@tag` chains OSS baseline → private org overlay →
-per-project policy (remote refs must pin a tag; private repos are fetched with the
-`GITHUB_TOKEN` environment variable). Exemptions require `expires` + `approved_by`,
-and expired exemptions surface as errors.
+## Policy in a nutshell
+
+```yaml
+# guard.policy.yaml
+version: 1
+target: claude-code
+extends:
+  - github:novexar/guardsmith//presets/baseline.yaml@v0.5.0 # tag pinning is mandatory
+  # Projects with a frontend also add:
+  # - github:novexar/guardsmith//presets/frontend.yaml@v0.5.0
+rules: [] # add or override (redefining an id overrides it)
+exemptions: [] # time-boxed waivers: reason + approved_by + expires required
+```
+
+`extends` composes OSS baseline → private organization overlay → per-project policy.
+Private repositories are fetched with the `GITHUB_TOKEN` environment variable, so
+organization-specific rules never leave your GitHub. Expired exemptions surface as
+errors — nothing is waived silently forever.
 
 ## CI enforcement
 
-Use the GitHub Action `novexar/Guardsmith@v0.5.0` — on violations the job fails, the
-report lands in the Job Summary and a PR comment, and a SARIF report is produced.
+Add one line to your workflow using the
+[GuardSmith Lint Action](https://github.com/marketplace/actions/guardsmith-lint):
+
+```yaml
+- uses: novexar/Guardsmith@v0.5.0
+```
+
+Violating PRs fail with a summary comment and a SARIF report. Air-gapped environments can
+run entirely from the self-contained bundle attached to
+[GitHub Releases](https://github.com/novexar/Guardsmith/releases) (`source: release` /
+`node guard.mjs`) — no npm registry access required.
 
 ## Documentation
 
-- Repository / getting started: https://github.com/novexar/Guardsmith
-- 3-layer overlay design: https://github.com/novexar/Guardsmith/blob/main/docs/LAYERING.md
+- Getting started & concepts: https://github.com/novexar/Guardsmith
+- 3-layer policy design: https://github.com/novexar/Guardsmith/blob/main/docs/LAYERING.md
+- Upgrading standards (per-release checklist): https://github.com/novexar/Guardsmith/tree/main/docs/migration
 
 ## License
 
