@@ -43,6 +43,19 @@
   [settings-reference](https://code.claude.com/docs/en/settings-reference) /
   [discover-plugins](https://code.claude.com/docs/en/discover-plugins)
 
+## 外部ツール連携(hooks)
+
+外部ツール(ccdash 等)は Claude Code の **HTTP hooks** でセッション/タスクのイベントを受け取れる。
+ローカル CI の結果 JSON(`.guardsmith/ci-results/`、詳細: `docs/CI_CD.md`)と合わせて、
+開発状況を可視化する外部ツールの受け口になる。
+
+1. `.claude/settings.local.json.example` を `.claude/settings.local.json` にコピーする。
+2. 受信側の URL・トークン(環境変数名)を自分の環境に合わせて編集する。
+3. トークン・URL は `settings.local.json` 側にのみ置き、コミットしない
+   (`.claude/settings.local.json` は `.gitignore` 済み。共有の `.claude/settings.json` には書かない)。
+
+- 仕様確認の根拠(確認日 2026-09-16): [hooks](https://code.claude.com/docs/en/hooks)
+
 ## PJ 固有の運用差分
 <!-- gen: 無ければ「特記事項なし」 -->
 - {{WORKFLOW_DIFFS}}

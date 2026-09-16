@@ -29,6 +29,20 @@ describe("guard new", () => {
     expect(existsSync(join(dest, ".gitignore"))).toBe(true);
     expect(existsSync(join(dest, "gitignore"))).toBe(false);
 
+    // Issue テンプレートは feature / bug / chore の3種(旧 task.md は配布しない)
+    expect(existsSync(join(dest, ".github/ISSUE_TEMPLATE/feature.md"))).toBe(true);
+    expect(existsSync(join(dest, ".github/ISSUE_TEMPLATE/bug.md"))).toBe(true);
+    expect(existsSync(join(dest, ".github/ISSUE_TEMPLATE/chore.md"))).toBe(true);
+    expect(existsSync(join(dest, ".github/ISSUE_TEMPLATE/task.md"))).toBe(false);
+
+    // 外部ツール連携用の HTTP hooks サンプルが展開され、JSON として妥当である
+    const hooksExamplePath = join(dest, ".claude/settings.local.json.example");
+    expect(existsSync(hooksExamplePath)).toBe(true);
+    const hooksExample = JSON.parse(readFileSync(hooksExamplePath, "utf8")) as {
+      hooks?: Record<string, unknown>;
+    };
+    expect(hooksExample.hooks?.["SessionStart"]).toBeDefined();
+
     // ponytail 導入用の共有 settings.json が展開され、JSON として妥当である
     const settingsPath = join(dest, ".claude/settings.json");
     expect(existsSync(settingsPath)).toBe(true);

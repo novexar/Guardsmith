@@ -19,7 +19,7 @@ React / FastAPI
 ## よく使うコマンド
 npm test
 ## ブランチ戦略
-feature-<issue>
+<type>/<issue番号>-<slug>(例: feature/142-preset-loader)
 ## PJ固有ルール
 なし
 <!-- standards: novexar/guardsmith v0.1.0 -->

@@ -1,0 +1,141 @@
+{
+  "//": [
+    "HTTP hooks サンプル — 外部ツール(ccdash 等)へセッション/タスクのイベントを通知する。",
+    "使い方: 本ファイルを .claude/settings.local.json にコピーし、url とトークン環境変数を自分の環境に合わせる。",
+    ".claude/settings.local.json は .gitignore 済み(URL・トークンをコミットしない)。",
+    "書式は公式仕様に準拠(https://code.claude.com/docs/en/hooks、確認日 2026-09-16)。",
+    "headers の $CCDASH_TOKEN は allowedEnvVars に列挙した環境変数のみ展開される。"
+  ],
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:8787/hooks/session-start",
+            "headers": { "Authorization": "Bearer $CCDASH_TOKEN" },
+            "allowedEnvVars": ["CCDASH_TOKEN"],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:8787/hooks/session-end",
+            "headers": { "Authorization": "Bearer $CCDASH_TOKEN" },
+            "allowedEnvVars": ["CCDASH_TOKEN"],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:8787/hooks/subagent-start",
+            "headers": { "Authorization": "Bearer $CCDASH_TOKEN" },
+            "allowedEnvVars": ["CCDASH_TOKEN"],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:8787/hooks/subagent-stop",
+            "headers": { "Authorization": "Bearer $CCDASH_TOKEN" },
+            "allowedEnvVars": ["CCDASH_TOKEN"],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:8787/hooks/post-tool-use",
+            "headers": { "Authorization": "Bearer $CCDASH_TOKEN" },
+            "allowedEnvVars": ["CCDASH_TOKEN"],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:8787/hooks/post-tool-use-failure",
+            "headers": { "Authorization": "Bearer $CCDASH_TOKEN" },
+            "allowedEnvVars": ["CCDASH_TOKEN"],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "TaskCreated": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:8787/hooks/task-created",
+            "headers": { "Authorization": "Bearer $CCDASH_TOKEN" },
+            "allowedEnvVars": ["CCDASH_TOKEN"],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:8787/hooks/task-completed",
+            "headers": { "Authorization": "Bearer $CCDASH_TOKEN" },
+            "allowedEnvVars": ["CCDASH_TOKEN"],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:8787/hooks/notification",
+            "headers": { "Authorization": "Bearer $CCDASH_TOKEN" },
+            "allowedEnvVars": ["CCDASH_TOKEN"],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:8787/hooks/stop",
+            "headers": { "Authorization": "Bearer $CCDASH_TOKEN" },
+            "allowedEnvVars": ["CCDASH_TOKEN"],
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -45,7 +45,7 @@ tools: Read, Write, Edit, Bash, Grep, Glob
 2. マイグレーションを `{{MIGRATIONS_PATH}}` に作成({{MIGRATION_NAMING}})。
 3. 構成に応じた検証を必ず用意: {{DB_VERIFICATION}}
 4. 適用手順(`{{DB_APPLY_CMD}}`)と、手動作業があれば明記。
-5. `feature-<issue>` / `bug-<issue>`({{BASE_BRANCH}} 起点)にコミットし、PR を作成(`Closes #<issue>`)。
+5. `<type>/<issue番号>-<slug>`({{BASE_BRANCH}} 起点。`start-task` スキルの命名)にコミットし、PR を作成(`Closes #<issue>`)。
 
 ## 成果物
 マイグレーション + 検証 + 適用手順 + PR。完了後は PM のレビュー(アクセス制御変更時はセキュリティレビュー含む)を受ける。

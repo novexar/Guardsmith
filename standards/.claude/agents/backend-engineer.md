@@ -23,7 +23,7 @@ tools: Read, Write, Edit, Bash, Grep, Glob
 2. **調査・再利用を先に**(既存実装 / ライブラリ / 公式 docs / レジストリ)。自作より実績ライブラリ優先。
 3. **TDD**: {{BE_TEST_RUNNER}} で RED → GREEN → REFACTOR。カバレッジ 80%+。
 4. セルフ品質ゲート: `{{BE_QUALITY_GATE_CMD}}` をグリーンに。
-5. `feature-<issue>` / `bug-<issue>`({{BASE_BRANCH}} 起点)にコミットし、PR を作成(`Closes #<issue>`)。
+5. `<type>/<issue番号>-<slug>`({{BASE_BRANCH}} 起点。`start-task` スキルの命名)にコミットし、PR を作成(`Closes #<issue>`)。
 
 ## 共通規約
 - 不変性厳守 / 関数 < 50 行 / ファイル < 800 行 / ネスト ≤ 4。型注釈必須。

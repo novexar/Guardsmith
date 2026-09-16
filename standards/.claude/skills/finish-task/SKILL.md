@@ -28,7 +28,7 @@ Novexar 標準の PR 手順。最上位ルールは `/CLAUDE.md`。
    ```
 
 5. **PR 作成(担当エンジニアが作成)**
-   - ベース: CLAUDE.md「ブランチ戦略」の起点ブランチ / 比較: `feature-<issue>` or `bug-<issue>`。
+   - ベース: CLAUDE.md「ブランチ戦略」の起点ブランチ / 比較: `<type>/<issue番号>-<slug>`(`start-task` スキルの命名)。
    - テンプレ(`.github/PULL_REQUEST_TEMPLATE.md`)に沿って変更概要・テスト計画を記載。
    - 本文に `Closes #<issue番号>` を含める。
    - `gh pr create --base <起点ブランチ> --fill`
