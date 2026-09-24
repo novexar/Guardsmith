@@ -106,9 +106,48 @@ afterAll(() => {
   rmSync(badRoot, { recursive: true, force: true });
 });
 
+describe("baseline: 収録ルール", () => {
+  it("テスト58: 3-way 追随ルール drift/standards-sync を配布する", () => {
+    const rule = policy.rules.find((r) => r.id === "drift/standards-sync");
+    expect(rule?.check).toBe("drift3");
+    expect(rule?.severity).toBe("warn");
+    if (rule?.check !== "drift3") throw new Error("unreachable");
+    expect(rule.with.source).toBe("github:novexar/guardsmith//standards@v0.7.0");
+    expect(rule.with.paths).toEqual([
+      "CLAUDE.md",
+      "DESIGN.md",
+      "docs/**/*.md",
+      ".claude/agents/**/*.md",
+    ]);
+    // 節単位の skills ルールは据え置き(1 リリースで両方の意味を変えない)
+    const skills = policy.rules.find((r) => r.id === "drift/skills-sync");
+    expect(skills?.check).toBe("drift");
+  });
+
+  it("vars ファイルを secret-scan の対象に含める (R6)", () => {
+    const rule = policy.rules.find((r) => r.id === "security/no-secrets-in-context");
+    if (rule?.check !== "secret-scan") throw new Error("unreachable");
+    expect(rule.with.paths).toContain("guardsmith.vars.yaml");
+  });
+
+  it("self preset は drift3 を持たない (R12: standards/ は配布マスター)", () => {
+    const self = parsePolicy(parse(readFileSync(resolve(REPO_ROOT, "presets/self.yaml"), "utf8")));
+    expect(self.ok, self.ok ? "" : self.errors.join("; ")).toBe(true);
+    if (!self.ok) return;
+    expect(self.policy.rules.some((r) => r.check === "drift3")).toBe(false);
+  });
+});
+
 describe("baseline: good fixture", () => {
   it("passes", () => {
     expect(good.ok).toBe(true);
+  });
+
+  it("drift3 は github: source のまま info スキップされる(warn を増やさない)", () => {
+    const hits = good.findings.filter((f) => f.ruleId === "drift/standards-sync");
+    expect(hits).toHaveLength(1);
+    expect(hits[0].severity).toBe("info");
+    expect(hits[0].message).toContain("requires remote fetch");
   });
 
   it("has zero warn (drift/skills-sync is info-skipped until github: fetch)", () => {

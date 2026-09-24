@@ -84,12 +84,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: novexar/Guardsmith@v0.6.0
+      - uses: novexar/Guardsmith@v0.7.0
 ```
 
 | Input              | Default                   | Description                                                                                                         |
 | ------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `cli-version`      | `0.5.0`                   | npm version of the CLI to run                                                                                       |
+| `cli-version`      | `0.6.0`                   | npm version of the CLI to run                                                                                       |
 | `root` / `policy`  | `.` / `guard.policy.yaml` | Directory / policy file to lint                                                                                     |
 | `upload-sarif`     | `true`                    | Upload SARIF to Code Scanning (set `"false"` on private repos without GHAS; the SARIF is still kept as an artifact) |
 | `pr-comment`       | `true`                    | Post a summary comment when lint fails                                                                              |
@@ -103,7 +103,7 @@ A self-contained bundle (all dependencies included) is attached to every
 Node.js 20+ are required — the npm registry is never contacted:
 
 ```bash
-gh release download v0.6.0 --repo novexar/Guardsmith --pattern 'guardsmith-cli-*.tar.gz'
+gh release download v0.7.0 --repo novexar/Guardsmith --pattern 'guardsmith-cli-*.tar.gz'
 tar -xzf guardsmith-cli-*.tar.gz
 node guardsmith-cli/guard.mjs lint
 ```
@@ -119,9 +119,9 @@ A project policy is a few lines of YAML with pinned remote references:
 version: 1
 target: claude-code
 extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v0.6.0
+  - github:novexar/guardsmith//presets/baseline.yaml@v0.7.0
   # Projects with a frontend also add:
-  # - github:novexar/guardsmith//presets/frontend.yaml@v0.6.0
+  # - github:novexar/guardsmith//presets/frontend.yaml@v0.7.0
 ignore: [] # globs excluded from every scan (concatenated across extends layers)
 rules: [] # add or override rules (redefining an id overrides it)
 exemptions: [] # time-boxed waivers: reason + approved_by + expires required

@@ -18,11 +18,11 @@ inputs:
   cli-version:
     description: "@guardsmith/cli version to run (used when source is 'npm')"
     required: false
-    default: "0.5.0"
+    default: "0.6.0"
   release-tag:
     description: "GuardSmith release tag to download the bundle from (used when source is 'release')"
     required: false
-    default: "v0.6.0"
+    default: "v0.7.0"
   guardsmith-token:
     description: >-
       Token used to fetch remote policy/standards repos referenced via

@@ -2,6 +2,67 @@
 
 [English](CHANGELOG.md) | **日本語**
 
+## v0.7.0 (2026-09-24)
+
+「**生成元の標準に PJ を追随させ続ける**」ためのリリース。これまではマスターとの乖離を
+測ることはできても、既に具体化された PJ へマスターの変更を取り込む手段が無かった
+(プレースホルダが失われているため)。`guardsmith.vars.yaml` に「どのプレースホルダを
+何に置換したか」を記録することで本物の 3-way マージが可能になり、`guard sync` と新設の
+`guard bump` が PJ の編集を保ったまま標準の変更だけを取り込む。
+既存 PJ の追随手順は docs/migration/v0.7.0.ja.md を参照。
+
+### Added
+
+- PJ ルートの `guardsmith.vars.yaml`(コミット対象): `version` / `standards`(生成元の
+  タグ。`vX.Y.Z` 固定)/ `vars`(プレースホルダのキー → 値)。`{{PROJECT_NAME}}` 等が
+  何になったかの唯一の記録であり、全ての 3-way 操作の入力になる
+- `guard sync` に **3-way モード**を追加。実効ポリシーに `drift3` ルールがあるときに使う。
+  旧マスター(`standards` タグ)と新マスター(source のタグ)を同じ vars で正規化し、
+  その差分を PJ へマージする。PJ の編集は残り、標準の変更だけが入る。節単位モード
+  (`check: drift`)は従来どおり同じ実行内で動く
+- `guard sync --init-vars`: v0.7.0 以前に初期化した PJ 向けに、旧マスターの各行の
+  プレースホルダ位置と PJ の対応行を突き合わせて `guardsmith.vars.yaml` を推定生成する。
+  決められない値は `TODO`、候補が割れたものは最頻値を採用して全候補をコメントに並記し、
+  秘密情報パターンに一致した値は書き出さず `TODO` に落とす
+- `guard sync --conflict-markers` / `guard bump --conflict-markers`: 衝突ファイルを無変更で
+  残す代わりに `<<<<<<<` / `|||||||` / `=======` / `>>>>>>>` 付きで書き出す。終了コードは
+  1 のままで、基準タグは進めない
+- `guard bump <tag> [--repo <owner>/<repo>]`: `guard.policy.yaml` のタグ固定参照を書き換え
+  (正規表現によるテキスト置換のみ。コメント・インデント・キー順は保存される)、同じ 3-way
+  計画で標準の変更を適用し、`standards` と `CLAUDE.md` のスタンプを進める。衝突時は
+  **1 ファイルも書かず** 1 を返す。`vars` に `TODO` が残っている間は実行を拒否する
+- 新 check `drift3`(`with: { source, paths }`): 未適用の標準変更を rule の severity で
+  報告する(`standards v0.6.0 → v0.7.0 not applied (N files, applies cleanly) —
+run: guard bump v0.7.0`)。手作業が要るものは `info`。`guardsmith.vars.yaml` が無い場合は
+  従来の節単位比較へ退避し、`--init-vars` を案内する
+- baseline: `drift/standards-sync`(warn、`check: drift3`)。対象は `CLAUDE.md` /
+  `DESIGN.md` / `docs/**/*.md` / `.claude/agents/**/*.md`。`drift/skills-sync` は節単位の
+  まま据え置く(1 リリースで両方の意味を変えない)
+- baseline `security/no-secrets-in-context` の対象に `guardsmith.vars.yaml` を追加
+  (コミット対象であり、放置すると静かな流出経路になるため)
+- `guard new` が `guardsmith.vars.yaml` の雛形(`standards: "v0.7.0"`・空の `vars`)を生成
+  する(init-project が記入する)
+
+### Changed
+
+- 標準 / init-project: インタビュー結果を適用と同時に `guardsmith.vars.yaml` へ**記録**
+  するようにし、「マスター更新への追随」手順を手動 diff から `guard bump <tag>` に変更
+- リモート参照タグ・生成物のスタンプを v0.7.0 に更新(baseline の drift source /
+  `guard new` の policy 生成 / docs 例示 / Action の `release-tag` 既定)
+- npm: `@guardsmith/core` / `@guardsmith/cli` 0.6.0(Action の `cli-version` 既定も 0.6.0)
+
+### Breaking
+
+- **`guard sync` が衝突時に終了コード 1 を返す**。従来は常に 0 だったため、`--write`
+  なしの `guard sync` をチェックとして CI で回している PJ は、標準と PJ が同じ行を
+  触ったときに落ちるようになる。これは意図した挙動(黙って乖離が広がる方が有害)だが、
+  タグを上げる前に対処が必要
+- **baseline v0.7.0 は `@guardsmith/cli` 0.6.0 以上が必要**。`drift3` check を含むため、
+  旧 CLI は strict スキーマで未知 check として拒否する。`extends` タグを上げる前に CLI を
+  上げること
+- **`guard new` の生成物が 1 ファイル増える**。`guardsmith.vars.yaml` は生成 PJ の一部で
+  あり、コミット対象(init-project が記入する)
+
 ## v0.6.0 (2026-09-24)
 
 「**どれだけ文脈を常駐させるか**」と「**誰が品質を確認するか**」を整理するリリース。

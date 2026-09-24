@@ -5,6 +5,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { main, restoreDotfiles } from "../src/cli.js";
 import { parsePolicy } from "../src/schema.js";
+import { loadVars, readStampTag } from "../src/vars.js";
 import { makeFixtureDir, write } from "./helpers.js";
 
 const cleanupDirs: string[] = [];
@@ -53,14 +54,37 @@ describe("guard new", () => {
 
     // standards バージョンコメントが guardsmith 版へ書き換わっている
     const claudeMd = readFileSync(join(dest, "CLAUDE.md"), "utf8");
-    expect(claudeMd).toContain("<!-- standards: novexar/guardsmith v0.6.0 -->");
+    expect(claudeMd).toContain("<!-- standards: novexar/guardsmith v0.7.0 -->");
     expect(claudeMd).not.toContain("standards: novexar/claude-standards");
 
     // タグ固定のリモート参照を持つ guard.policy.yaml が生成され、スキーマを通る
     const policyRaw = readFileSync(join(dest, "guard.policy.yaml"), "utf8");
-    expect(policyRaw).toContain("github:novexar/guardsmith//presets/baseline.yaml@v0.6.0");
+    expect(policyRaw).toContain("github:novexar/guardsmith//presets/baseline.yaml@v0.7.0");
     const parsed = parsePolicy(parse(policyRaw));
     expect(parsed.ok).toBe(true);
+  });
+
+  it("writes a guardsmith.vars.yaml skeleton pinned to the standards tag (テスト59)", async () => {
+    const parent = makeFixtureDir("gs-new-vars");
+    cleanupDirs.push(parent);
+    const dest = join(parent, "my-project");
+    expect(await main(["new", dest])).toBe(0);
+
+    const varsPath = join(dest, "guardsmith.vars.yaml");
+    expect(existsSync(varsPath)).toBe(true);
+    const raw = readFileSync(varsPath, "utf8");
+    // init-project が記入する旨が先頭コメントに書かれている
+    expect(raw.split("\n")[0]).toMatch(/^#/);
+    expect(raw).toContain("init-project");
+    expect(raw).toContain("vars: {}");
+
+    const doc = loadVars(dest);
+    expect(doc).not.toBeNull();
+    expect(doc?.version).toBe(1);
+    expect(doc?.standards).toBe("v0.7.0");
+    expect(doc?.vars).toEqual({});
+    // スタンプと vars の基準タグが一致している(食い違いは警告対象)
+    expect(readStampTag(readFileSync(join(dest, "CLAUDE.md"), "utf8"))).toBe(doc?.standards);
   });
 
   it("restoreDotfiles renames a dotless gitignore (npm パッケージ配布経路 — #1)", () => {

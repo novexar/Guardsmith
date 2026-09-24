@@ -114,9 +114,21 @@ rules:
     with:
       # マスターは guardsmith リポジトリの standards/ サブディレクトリ。
       # loadPolicy がタグのtarballを取得・キャッシュし file: に解決してから検査する
-      source: github:novexar/guardsmith//standards@v0.6.0
+      source: github:novexar/guardsmith//standards@v0.7.0
       paths: [".claude/skills/**"]
       allow_sections: ["## PJ固有手順"]
+
+  # --- 標準本体のマスター追随 (3-way: PJ の編集を保ったまま標準の変更だけ取り込む) ---
+  # 注意: 旧 CLI (<= 0.5.0) は未知の check を strict スキーマで拒否するため、
+  #       本ルールを含む baseline は CLI 0.6.0 以上でのみ利用できる。
+  #       判定には guardsmith.vars.yaml(init-project / guard sync --init-vars が生成)が要る。
+  - id: drift/standards-sync
+    severity: warn
+    description: 標準本体(CLAUDE.md / DESIGN.md / docs / agents)が旧タグのまま取り残されていないこと(3-way)
+    check: drift3
+    with:
+      source: github:novexar/guardsmith//standards@v0.7.0
+      paths: ["CLAUDE.md", "DESIGN.md", "docs/**/*.md", ".claude/agents/**/*.md"]
 
   # --- CI/CD 方針 (docs/CI_CD.md: CI はローカル Docker、Actions は main push の deploy のみ) ---
   - id: ci/no-remote-test-workflows
@@ -130,11 +142,13 @@ rules:
   # --- セキュリティ ---
   - id: security/no-secrets-in-context
     severity: error
-    description: CLAUDE.md・.claude配下への資格情報混入禁止
+    description: CLAUDE.md・.claude配下・vars への資格情報混入禁止
     check: secret-scan
     with:
       paths:
         - CLAUDE.md
+        # 置換値の記録(コミット対象)。秘密情報が紛れ込むと必ず流出する経路になる
+        - guardsmith.vars.yaml
         - ".claude/**"
         # Claude Code エージェントの一時 worktree(リポジトリ全体のコピーを含む)は対象外。
         # guard 0.4.0 以降は .gitignore 追従で自動的に外れるが、旧 CLI でも効くよう明示する

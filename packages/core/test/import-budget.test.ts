@@ -655,7 +655,8 @@ describe("presets carry the import-budget rule", () => {
         (f) => f.ruleId === "claude-md/import-budget" && f.message.includes("exceeds max_chars"),
       ),
     ).toBe(false);
-  });
+    // 並列実行時はリポジトリ全体の走査に時間がかかるため既定の 5 秒では足りない
+  }, 15000);
 });
 
 /* ---------- パーサ単体 ---------- */
