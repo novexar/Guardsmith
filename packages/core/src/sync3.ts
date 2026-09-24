@@ -14,7 +14,7 @@ import { dirname, join } from "node:path";
 import { createGlobScope, globFiles, type GlobScope } from "./glob.js";
 import { detectEol, merge3, type ConflictRegion } from "./merge3.js";
 import { STAMP_RE, normalizeMaster, stampFor } from "./normalize.js";
-import { withStandardsTag, writeVars, type VarsDocument } from "./vars.js";
+import { updateStandardsTag, type VarsDocument } from "./vars.js";
 
 export type Sync3Kind =
   | "merge" // クリーンに適用できる
@@ -142,7 +142,7 @@ export function applySync3(
     return;
   }
   for (const a of writable) writeAction(rootDir, a);
-  writeVars(rootDir, withStandardsTag(vars, plan.nextTag));
+  updateStandardsTag(rootDir, vars, plan.nextTag);
   ensureStamp(rootDir, plan.nextTag);
 }
 

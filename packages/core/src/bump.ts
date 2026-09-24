@@ -112,11 +112,11 @@ export async function runBump(opts: BumpOptions): Promise<number> {
     gitignore: opts.gitignore,
     conflictMarkers: opts.conflictMarkers,
   });
-  console.log(formatSync3Plan(plan, plan.conflicted.length === 0));
 
   // ③ 衝突: 既定は 1 ファイルも書かない。--conflict-markers のときだけマーカーを書く
   //    (どちらの場合も policy と vars は進めない)
   if (plan.conflicted.length > 0) {
+    console.log(formatSync3Plan(plan, false));
     if (opts.conflictMarkers === true) applySync3(plan, rootDir, vars);
     console.error(
       `bump aborted: ${plan.conflicted.length} file(s) conflict — ` +
@@ -128,9 +128,11 @@ export async function runBump(opts: BumpOptions): Promise<number> {
     return 1;
   }
 
-  // ④ ファイル → vars/スタンプ → policy の順に書く(policy を最後に回すのは R8)
+  // ④ ファイル → vars/スタンプ → policy の順に書く(policy を最後に回すのは R8)。
+  //    表示は書き終えてから行う(途中で失敗したときに「適用済み」と出さない)
   applySync3(plan, rootDir, vars);
   if (rewrite.rewritten.length > 0) writeFileSync(policyFile, rewrite.text);
+  console.log(formatSync3Plan(plan, true));
   for (const r of rewrite.rewritten) {
     console.log(`POLICY   ${r.from} → ${r.to}  (${r.line})`);
   }

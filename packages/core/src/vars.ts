@@ -104,6 +104,30 @@ export function serializeVars(
   return `${lines.join("\n")}\n`;
 }
 
+/**
+ * `standards:` 行だけをその場で差し替える(値・コメント・キー順は保存する)。
+ * 同期のたびに serializeVars で全文を書き直すと、`--init-vars` が残した候補コメントや
+ * PM が書いた注記が静かに消えるため、policy の書き換え(bump.ts)と同じ方針にする。
+ * 行が見つからない場合だけ全文を書き直す。
+ */
+export function updateStandardsTag(
+  rootDir: string,
+  doc: Readonly<VarsDocument>,
+  tag: string,
+): void {
+  if (!TAG_RE.test(tag)) throw new Error(`${TAG_MESSAGE} (got '${tag}')`);
+  const path = join(rootDir, VARS_FILENAME);
+  const re = /^(standards:[ \t]*).*$/m;
+  if (existsSync(path)) {
+    const text = readFileSync(path, "utf8");
+    if (re.test(text)) {
+      writeFileSync(path, text.replace(re, `$1${quote(tag)}`));
+      return;
+    }
+  }
+  writeVars(rootDir, withStandardsTag(doc, tag));
+}
+
 /** vars → CLAUDE.md スタンプ → null の優先順で基準タグを決める */
 export function resolveBaseTag(rootDir: string): BaseTagResolution | null {
   const claudeMdPath = join(rootDir, "CLAUDE.md");

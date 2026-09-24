@@ -142,6 +142,9 @@ function concretize(master: string, tag: string): string {
   return normalizeMaster(master, { vars: VARS.vars, stamp: stampFor(tag) }).text;
 }
 
+/** vars に PM が書いた注記(--init-vars の候補コメント等)が消えないことの目印 */
+const VARS_NOTE = "PM 注記: OWNER は法人名で統一する";
+
 function buildProject(opts: { conflict?: boolean; todo?: boolean; noVars?: boolean } = {}): Built {
   const masters = fixtureDir("gs-bump-master");
   write(masters, "v0.6.0/standards/CLAUDE.md", MASTER_CLAUDE);
@@ -165,7 +168,13 @@ function buildProject(opts: { conflict?: boolean; todo?: boolean; noVars?: boole
   const design = concretize(MASTER_DESIGN, "v0.6.0");
   write(proj, "DESIGN.md", opts.conflict === true ? design.replace("16px", "14px") : design);
   if (opts.noVars !== true) {
-    writeVars(proj, opts.todo === true ? { ...VARS, vars: { ...VARS.vars, OWNER: "TODO" } } : VARS);
+    writeVars(
+      proj,
+      opts.todo === true ? { ...VARS, vars: { ...VARS.vars, OWNER: "TODO" } } : VARS,
+      {
+        header: [VARS_NOTE],
+      },
+    );
   }
 
   const policyText = `version: 1
@@ -213,6 +222,10 @@ describe("runBump", () => {
     expect(claudeMd).toContain("<!-- standards: novexar/guardsmith v0.7.0 -->");
     expect(readFileSync(join(built.proj, "DESIGN.md"), "utf8")).toContain("- 本文: 15px");
     expect(loadVars(built.proj)?.standards).toBe("v0.7.0");
+    // vars は standards 行だけが書き換わり、PM の注記コメントは残る
+    const varsRaw = readFileSync(join(built.proj, "guardsmith.vars.yaml"), "utf8");
+    expect(varsRaw).toContain(VARS_NOTE);
+    expect(varsRaw).toContain('standards: "v0.7.0"');
     // policy の github: 参照が新タグへ(コメント内も追従)
     expect(readFileSync(built.policyFile, "utf8")).toContain("baseline.yaml@v0.7.0");
   });
