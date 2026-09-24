@@ -40,6 +40,12 @@ Novexar 標準の着手手順。最上位ルールは `/CLAUDE.md`(特に「ブ�
 4. **着手宣言**
    - Issue を In Progress(担当アサイン)にし、必要なら `.claude/agents/` の関連 Agent へ委任。
 
+5. **再開時(中断した作業の続きの場合)**
+   - `.guardsmith/state/<issue番号>.md` があれば読み、記録された状態(ブランチ / HEAD / 変更箇所 / 未解決の QA 指摘)と
+     **実際の差分(`git status` / `git diff`)を照合してから続行する**。食い違う場合は実差分を正とし、記録を上書き更新する。
+   - **別 Issue に着手する場合は、前の Issue の文脈を引き継がず新しい担当で開始する**
+     (文脈管理の基準: `docs/DEVELOPMENT_WORKFLOW.md`「文脈管理」)。
+
 ## 完了後
 
 実装は TDD(カバレッジ 80%+)。完了したら `finish-task` スキルで PR を作成する。

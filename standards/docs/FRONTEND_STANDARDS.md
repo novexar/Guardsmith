@@ -33,28 +33,9 @@
 - チャートライブラリの二重採用禁止(1画面1系統。前掲表を参照)。
 - 装飾的シャドウ・多色グラデーションの使用禁止(`/DESIGN.md` の Do's and Don'ts を参照)。
 
-## 検証プリセットの使い方
-
-FE を持つ PJ は `guard.policy.yaml` の `extends` に frontend プリセットを追加する
-(baseline には FE ルールを含めない。BE のみの PJ が誤警告を受けないための分離)。
-
-```yaml
-version: 1
-target: claude-code
-extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@vX.Y.Z
-  - github:novexar/guardsmith//presets/frontend.yaml@vX.Y.Z # ← FE を持つ PJ のみ追加
-```
-
-- ローカル開発(guardsmith リポジトリ内や CLI 同梱プリセット)では `preset:frontend` と書ける。
-- リモート参照はタグ固定(`@vX.Y.Z`)必須。実例:
-  `github:novexar/guardsmith//presets/frontend.yaml@v0.5.0`
-- 検査内容: `DESIGN.md` の存在(`frontend/design-md`)/ shadcn 設定 `components.json` の存在
-  (`frontend/shadcn-config`)/ 競合 UI ライブラリ不在(`frontend/no-competing-ui-libs`)/
-  DESIGN.md の具体化完了(`frontend/design-md-initialized`)。
-
 ## 関連ドキュメント
 
+- 検証プリセット(frontend)の追加手順: `.claude/skills/init-project/SKILL.md`(初回セットアップ時に実施)
 - デザイン仕様: `/DESIGN.md`(PJ ごとに init-project で具体化)
 - 構成テンプレート: `.claude/templates/frontend/`(構成と命名の参照。実 PJ は scaffold ツールで生成)
 - コーディング規約: `docs/CODING_STANDARDS.md`

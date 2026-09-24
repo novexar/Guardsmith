@@ -25,7 +25,7 @@ description: マスターテンプレートからコピーされた本リポジ�
 | 対象 | 作業 |
 |---|---|
 | `/CLAUDE.md` | プレースホルダ置換、未初期化警告ブロック削除。**末尾の standards バージョンコメントは維持** |
-| `docs/*.md` | 各雛形を具体化(REQUIREMENTS / ARCHITECTURE / CODING_STANDARDS / DEVELOPMENT_WORKFLOW) |
+| `docs/*.md` | 各雛形を具体化(REQUIREMENTS / ARCHITECTURE / CODING_STANDARDS / DEVELOPMENT_WORKFLOW / SETUP) |
 | `.claude/agents/*.md` | 手順1で決めた構成のみ残して具体化。**不要なエージェントはファイルごと削除** |
 | `.github/` | Issue / PR テンプレのラベル・項目を PJ に合わせ微調整(原則そのまま)。workflows/deploy.yml はデプロイ先確定まで no-op のまま(**テスト系ワークフローを追加しない**) |
 | `docker/ci/*` / `docker-compose.ci.yml` / `Makefile` | ローカル CI 構成を PJ のスタックへ具体化(FE / BE の片方しか無い PJ は不要なサービス・Dockerfile・ターゲットを削除)。具体化後に `make ci` が通ることを確認する |
@@ -36,7 +36,22 @@ description: マスターテンプレートからコピーされた本リポジ�
 #### フロントエンド関連(FE の有無で分岐)
 - **FE がある PJ**:
   - `/DESIGN.md` を PJ の性質に合わせて具体化する。**参考にする design-md(既存サービスや類似ダッシュボード)を PM がオーナーに確認してから**編集する。`docs/FRONTEND_STANDARDS.md` の標準(ダークモード既定・アクセント1色・ステータス3色)を反映する。
-  - `guard.policy.yaml` の `extends` に frontend プリセット(`github:novexar/guardsmith//presets/frontend.yaml@vX.Y.Z`。ローカルなら `preset:frontend`)を追加する。
+  - **frontend 検証プリセットを追加する**。`guard.policy.yaml` の `extends` に frontend プリセットを足す
+    (baseline には FE ルールを含めない。BE のみの PJ が誤警告を受けないための分離)。
+
+    ```yaml
+    version: 1
+    target: claude-code
+    extends:
+      - github:novexar/guardsmith//presets/baseline.yaml@vX.Y.Z
+      - github:novexar/guardsmith//presets/frontend.yaml@vX.Y.Z # ← FE を持つ PJ のみ追加
+    ```
+
+    - リモート参照はタグ固定(`@vX.Y.Z`)必須。実例: `github:novexar/guardsmith//presets/frontend.yaml@v0.5.1`
+    - ローカル開発(guardsmith リポジトリ内や CLI 同梱プリセット)では `preset:frontend` と書ける。
+    - 検査内容: `DESIGN.md` の存在(`frontend/design-md`)/ shadcn 設定 `components.json` の存在
+      (`frontend/shadcn-config`)/ 競合 UI ライブラリ不在(`frontend/no-competing-ui-libs`)/
+      DESIGN.md の具体化完了(`frontend/design-md-initialized`)。
 - **FE が無い PJ**: `/DESIGN.md` と `.claude/templates/frontend/` をフォルダごと削除する(frontend-engineer.md の削除と同時に行う)。
 
 ### 3. 自己検証(Definition of Done)
@@ -48,7 +63,7 @@ description: マスターテンプレートからコピーされた本リポジ�
 - [ ] CLAUDE.md に契約見出し「技術スタック」「よく使うコマンド」「ブランチ戦略」「PJ固有ルール」が全て存在する
 - [ ] 「よく使うコマンド」表のコマンドを実際に実行し、全てエラーなく動作する(scaffold 済みの場合)
 - [ ] `make ci` が全ジョブ成功で完走し、`.guardsmith/ci-results/latest.json` が生成される(scaffold 済みの場合)
-- [ ] CLAUDE.md が 120 行以内(超える場合は docs/ へ退避して @参照に置換)
+- [ ] CLAUDE.md 本体が 120 行以内。**`@` インポートは `docs/CODING_STANDARDS.md` のみ**(他の文書は通常パス + 「読む条件」を添えて記載)。常駐量は `guard lint` で確認する
 - [ ] 各エージェントの Novexar 標準節が雛形から緩和されていない(目視確認)
 - [ ] 不要エージェント・不要テンプレが削除されている
 
