@@ -189,6 +189,19 @@ describe("runInitVars", () => {
     expect(loadVars(proj)?.standards).toBe("v0.6.0");
   });
 
+  it("マスターに 1 件も該当が無ければ空の vars を書かずに 2 を返す", async () => {
+    const { proj, policyFile } = buildProject();
+    // paths がマスターの実体と噛み合っていないケース(source の指定ミス等)
+    writeFileSync(
+      policyFile,
+      readFileSync(policyFile, "utf8").replace('["CLAUDE.md", "docs/**/*.md"]', '["docs/**/*.md"]'),
+    );
+    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    expect(await runInitVars({ rootDir: proj, policyFile })).toBe(2);
+    expect(existsSync(join(proj, "guardsmith.vars.yaml"))).toBe(false);
+    expect(spy.mock.calls.map((c) => String(c[0])).join("\n")).toContain("no master files matched");
+  });
+
   it("drift3 ルールが無い policy では 2 を返す", async () => {
     const { proj, policyFile } = buildProject();
     writeFileSync(policyFile, "version: 1\ntarget: claude-code\nrules: []\n");

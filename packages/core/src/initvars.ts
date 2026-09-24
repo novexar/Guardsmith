@@ -212,6 +212,15 @@ export async function runInitVars(opts: InitVarsOptions): Promise<number> {
     }
   }
 
+  if (masterFiles.size === 0) {
+    // 空の vars を黙って書くと「推定できた結果ゼロ件」と区別がつかない
+    console.error(
+      `no master files matched the drift3 paths at ${stampTag} — ` +
+        "check the rule's `source` and that the tag is the one the project was generated from",
+    );
+    return 2;
+  }
+
   const inferred = inferVars(masterFiles, localFiles);
   const mismatch = extendsTagMismatch(readFileSync(policyFile, "utf8"), stampTag);
   const doc: VarsDocument = { version: 1, standards: stampTag, vars: inferred.vars };

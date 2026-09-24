@@ -213,7 +213,19 @@ async function resolveMasterPair(
   if (origin.startsWith("file:")) {
     const local = parseLocalDriftSource(origin);
     const headTag = opts.headTag ?? local.tag ?? baseTag;
-    return { baseRoot: local.root(baseTag), headRoot: local.root(headTag), baseTag, headTag };
+    const roots = { baseRoot: local.root(baseTag), headRoot: local.root(headTag) };
+    // github: は ensureRepoCached が存在を保証するが file: は保証が無い。
+    // 存在しないディレクトリを黙って空マスターとして扱うと「全ファイルがマスターから
+    // 消えた」と誤判定し、bump が何も適用せずタグだけ進めてしまう
+    for (const [label, dir] of [
+      ["base", roots.baseRoot],
+      ["head", roots.headRoot],
+    ] as const) {
+      if (!existsSync(dir)) {
+        throw new Error(`drift3 source '${origin}': ${label} master not found at ${dir}`);
+      }
+    }
+    return { ...roots, baseTag, headTag };
   }
   const gh = parseGithubRef(origin);
   const headTag = opts.headTag ?? gh.tag;

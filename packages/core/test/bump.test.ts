@@ -286,6 +286,15 @@ describe("runBump", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     expect(await runBump({ ...bumpOpts(built), repo: "guardsmith" })).toBe(2);
   });
+
+  it("新タグのマスターが存在しなければ書く前に落ちる(タグだけ進めない)", async () => {
+    const built = buildProject();
+    const before = snapshot(built.proj);
+    // v0.9.0 のマスターは用意していない。空マスターとして扱うと「全ファイルが
+    // マスターから消えた」と誤判定し、何も適用せずタグだけ進んでしまう
+    await expect(runBump(bumpOpts(built, "v0.9.0"))).rejects.toThrow(/head master not found/);
+    expect(snapshot(built.proj)).toEqual(before);
+  });
 });
 
 /* ---------------- 統合: guard new → 具体化 → vars → guard bump ---------------- */
