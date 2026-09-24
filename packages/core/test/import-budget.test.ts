@@ -89,26 +89,10 @@ describe("import-budget schema", () => {
     expect(parsePolicy(rule({ path: "CLAUDE.md", max_chars: 32000, max_depth: 4 })).ok).toBe(true);
   });
 
-  // 既知の制約: Rule は `discriminatedUnion(...).and(RuleBase)` で組んでおり、zod 4 の
-  // intersection を通ると branch 側 `.strict()` の未知キー拒否が失われる(既存8 check も同様に
-  // 素通りする)。import-budget だけ挙動を変えないことをここで固定する。
-  // 全 check 横断の仕様判断のため docs/decisions-needed.md に起票した。
-  it("treats unknown keys in with the same way as the existing checks", () => {
-    expect(parsePolicy(rule({ path: "CLAUDE.md", maxChars: 100 })).ok).toBe(true);
-    expect(
-      parsePolicy({
-        version: 1,
-        target: "claude-code",
-        rules: [
-          {
-            id: "a/b",
-            severity: "warn",
-            check: "max-lines",
-            with: { path: "x", limit: 1, bogus: 2 },
-          },
-        ],
-      }).ok,
-    ).toBe(true);
+  it("rejects an unknown key in with (strict)", () => {
+    const r = parsePolicy(rule({ path: "CLAUDE.md", maxChars: 100 }));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors.join("; ")).toContain("maxChars");
   });
 
   it("rejects missing path", () => {

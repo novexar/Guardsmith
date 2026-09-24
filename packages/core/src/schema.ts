@@ -55,134 +55,169 @@ export const DriftSource = z.union([
 const NonEmpty = z.string().min(1);
 const Paths = z.array(NonEmpty).min(1);
 
+/* ---------- ルール共通フィールド ---------- */
+
+/**
+ * 全 check 共通のフィールド。各 check ブランチへ直接展開する。
+ *
+ * 重要: 以前は `discriminatedUnion(...).and(RuleBase)` で合成していたが、zod の intersection
+ * を通すとブランチ側 `.strict()` の未知キー拒否が失われ、`with` のタイポ(`limt` 等)が
+ * 黙って捨てられていた。「タイポはエラー」を守るため共通フィールドを各ブランチへ平坦化し、
+ * discriminatedUnion 1段だけで Rule を構成する。
+ */
+const RULE_BASE = {
+  id: RULE_ID,
+  severity: Severity,
+  description: NonEmpty.optional(),
+};
+
 /* ---------- check種別ごとの with ---------- */
 
-const FileExists = z.object({
-  check: z.literal("file-exists"),
-  with: z.object({ paths: Paths }).strict(),
-});
+const FileExists = z
+  .object({
+    ...RULE_BASE,
+    check: z.literal("file-exists"),
+    with: z.object({ paths: Paths }).strict(),
+  })
+  .strict();
 
-const FileAbsent = z.object({
-  check: z.literal("file-absent"),
-  with: z.object({ paths: Paths }).strict(),
-});
+const FileAbsent = z
+  .object({
+    ...RULE_BASE,
+    check: z.literal("file-absent"),
+    with: z.object({ paths: Paths }).strict(),
+  })
+  .strict();
 
-const ContentMatch = z.object({
-  check: z.literal("content-match"),
-  with: z
-    .object({
-      path: NonEmpty, // glob可
-      must: z.array(NonEmpty).optional(),
-      must_not: z.array(NonEmpty).optional(),
-    })
-    .strict()
-    .refine((w) => (w.must?.length ?? 0) + (w.must_not?.length ?? 0) > 0, {
-      message: "content-match requires at least one of must / must_not",
-    }),
-});
+const ContentMatch = z
+  .object({
+    ...RULE_BASE,
+    check: z.literal("content-match"),
+    with: z
+      .object({
+        path: NonEmpty, // glob可
+        must: z.array(NonEmpty).optional(),
+        must_not: z.array(NonEmpty).optional(),
+      })
+      .strict()
+      .refine((w) => (w.must?.length ?? 0) + (w.must_not?.length ?? 0) > 0, {
+        message: "content-match requires at least one of must / must_not",
+      }),
+  })
+  .strict();
 
-const MaxLines = z.object({
-  check: z.literal("max-lines"),
-  with: z.object({ path: NonEmpty, limit: z.number().int().positive() }).strict(),
-});
+const MaxLines = z
+  .object({
+    ...RULE_BASE,
+    check: z.literal("max-lines"),
+    with: z.object({ path: NonEmpty, limit: z.number().int().positive() }).strict(),
+  })
+  .strict();
 
 /**
  * import-budget: CLAUDE.md 本体 + `@` インポート先の常駐量を測る。
  * max_depth の既定は公式仕様の上限(four hops)= DEFAULT_IMPORT_MAX_DEPTH。
  */
-const ImportBudget = z.object({
-  check: z.literal("import-budget"),
-  with: z
-    .object({
-      path: NonEmpty, // glob可(通常は CLAUDE.md)
-      /** 本体 + インポート先の合計文字数の上限。超過で rule の severity の finding */
-      max_chars: z.number().int().positive().optional(),
-      /** 再帰インポートを追う深さの上限(省略時 4) */
-      max_depth: z.number().int().positive().optional(),
-    })
-    .strict(),
-});
+const ImportBudget = z
+  .object({
+    ...RULE_BASE,
+    check: z.literal("import-budget"),
+    with: z
+      .object({
+        path: NonEmpty, // glob可(通常は CLAUDE.md)
+        /** 本体 + インポート先の合計文字数の上限。超過で rule の severity の finding */
+        max_chars: z.number().int().positive().optional(),
+        /** 再帰インポートを追う深さの上限(省略時 4) */
+        max_depth: z.number().int().positive().optional(),
+      })
+      .strict(),
+  })
+  .strict();
 
-const Frontmatter = z.object({
-  check: z.literal("frontmatter"),
-  with: z
-    .object({
-      paths: Paths,
-      required: z.array(NonEmpty).min(1),
-      /** キーごとの値制約(regex)。v0.1では文字列regexのみ */
-      schema: z.record(NonEmpty, NonEmpty).optional(),
-    })
-    .strict(),
-});
+const Frontmatter = z
+  .object({
+    ...RULE_BASE,
+    check: z.literal("frontmatter"),
+    with: z
+      .object({
+        paths: Paths,
+        required: z.array(NonEmpty).min(1),
+        /** キーごとの値制約(regex)。v0.1では文字列regexのみ */
+        schema: z.record(NonEmpty, NonEmpty).optional(),
+      })
+      .strict(),
+  })
+  .strict();
 
 const JsonPathOp = z.enum(["eq", "ne", "matches", "not-matches", "exists", "absent"]);
 
-const JsonPath = z.object({
-  check: z.literal("json-path"),
-  with: z
-    .object({
-      path: NonEmpty,
-      assert: z
-        .array(
-          z
-            .object({
-              query: NonEmpty, // JSONPath式 ($.permissions.allow[*] 等)
-              op: JsonPathOp,
-              value: z.union([z.string(), z.number(), z.boolean()]).optional(),
-            })
-            .strict()
-            .refine((a) => ["exists", "absent"].includes(a.op) || a.value !== undefined, {
-              message: "value is required unless op is exists/absent",
-            }),
-        )
-        .min(1),
-    })
-    .strict(),
-});
+const JsonPath = z
+  .object({
+    ...RULE_BASE,
+    check: z.literal("json-path"),
+    with: z
+      .object({
+        path: NonEmpty,
+        assert: z
+          .array(
+            z
+              .object({
+                query: NonEmpty, // JSONPath式 ($.permissions.allow[*] 等)
+                op: JsonPathOp,
+                value: z.union([z.string(), z.number(), z.boolean()]).optional(),
+              })
+              .strict()
+              .refine((a) => ["exists", "absent"].includes(a.op) || a.value !== undefined, {
+                message: "value is required unless op is exists/absent",
+              }),
+          )
+          .min(1),
+      })
+      .strict(),
+  })
+  .strict();
 
-const Drift = z.object({
-  check: z.literal("drift"),
-  with: z
-    .object({
-      source: DriftSource,
-      paths: Paths,
-      /** 見出し(## 〜)単位で編集を許可する範囲 */
-      allow_sections: z.array(NonEmpty).optional(),
-    })
-    .strict(),
-});
+const Drift = z
+  .object({
+    ...RULE_BASE,
+    check: z.literal("drift"),
+    with: z
+      .object({
+        source: DriftSource,
+        paths: Paths,
+        /** 見出し(## 〜)単位で編集を許可する範囲 */
+        allow_sections: z.array(NonEmpty).optional(),
+      })
+      .strict(),
+  })
+  .strict();
 
-const SecretScan = z.object({
-  check: z.literal("secret-scan"),
-  with: z
-    .object({
-      paths: Paths,
-      extra_patterns: z.array(NonEmpty).optional(),
-    })
-    .strict(),
-});
+const SecretScan = z
+  .object({
+    ...RULE_BASE,
+    check: z.literal("secret-scan"),
+    with: z
+      .object({
+        paths: Paths,
+        extra_patterns: z.array(NonEmpty).optional(),
+      })
+      .strict(),
+  })
+  .strict();
 
 /* ---------- ルール本体 ---------- */
 
-const RuleBase = z.object({
-  id: RULE_ID,
-  severity: Severity,
-  description: NonEmpty.optional(),
-});
-
-export const Rule = z
-  .discriminatedUnion("check", [
-    FileExists,
-    FileAbsent,
-    ContentMatch,
-    MaxLines,
-    ImportBudget,
-    Frontmatter,
-    JsonPath,
-    Drift,
-    SecretScan,
-  ])
-  .and(RuleBase);
+export const Rule = z.discriminatedUnion("check", [
+  FileExists,
+  FileAbsent,
+  ContentMatch,
+  MaxLines,
+  ImportBudget,
+  Frontmatter,
+  JsonPath,
+  Drift,
+  SecretScan,
+]);
 export type Rule = z.infer<typeof Rule>;
 
 /* ---------- 例外・出力 ---------- */
