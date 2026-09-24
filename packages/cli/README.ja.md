@@ -51,6 +51,21 @@ npx @guardsmith/cli explain claude-md/thin-diff
 npx @guardsmith/cli version
 ```
 
+| コマンド                  | 主なフラグ                                                                                     |
+| ------------------------- | ---------------------------------------------------------------------------------------------- |
+| `guard new <dir>`         | —                                                                                              |
+| `guard init`              | —                                                                                              |
+| `guard lint`              | `--root`、`--policy`、`--format console\|sarif\|json`、`--out`、`--no-cache`、`--no-gitignore` |
+| `guard sync`              | `--root`、`--policy`、`--write`、`--no-cache`、`--no-gitignore`                                |
+| `guard explain <rule-id>` | —                                                                                              |
+| `guard version`           | —                                                                                              |
+
+各 check は「**コミットされうるファイル**」を対象にします。既定で `.gitignore`(入れ子も)に
+追従し、`.git/` は常に除外するため、`secret-scan` は `.claude/settings.local.json` の中身を
+報告せず、`file-exists` は `.gitignore` 対象のパスを「存在しない」と扱います。さらにポリシーの
+`ignore`(glob)を除外し、除外対象は結果フィルタではなく走査の時点で枝刈りします。
+`--no-gitignore` で全走査に戻せます。
+
 `guard new` の後は Claude Code でプロジェクトを開いてください — 同梱の `init-project`
 スキルがインタビューを行い、テンプレートを具体化します。初期化が本当に完了すると
 `guard lint` が PASS します。
@@ -62,9 +77,10 @@ npx @guardsmith/cli version
 version: 1
 target: claude-code
 extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v0.5.1 # tag pinning is mandatory
+  - github:novexar/guardsmith//presets/baseline.yaml@v0.5.2 # tag pinning is mandatory
   # Projects with a frontend also add:
-  # - github:novexar/guardsmith//presets/frontend.yaml@v0.5.1
+  # - github:novexar/guardsmith//presets/frontend.yaml@v0.5.2
+ignore: [] # 全走査から除外する glob(extends 間で連結される)
 rules: [] # add or override (redefining an id overrides it)
 exemptions: [] # time-boxed waivers: reason + approved_by + expires required
 ```
@@ -80,7 +96,7 @@ GitHub の外に出ることはありません。期限切れの例外(exemption
 workflow に 1 行追加:
 
 ```yaml
-- uses: novexar/Guardsmith@v0.5.1
+- uses: novexar/Guardsmith@v0.5.2
 ```
 
 違反した PR はサマリコメントと SARIF レポート付きで失敗します。閉域網などの環境では

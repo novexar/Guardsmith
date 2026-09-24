@@ -104,7 +104,7 @@ rules:
     with:
       # マスターは guardsmith リポジトリの standards/ サブディレクトリ。
       # loadPolicy がタグのtarballを取得・キャッシュし file: に解決してから検査する
-      source: github:novexar/guardsmith//standards@v0.5.1
+      source: github:novexar/guardsmith//standards@v0.5.2
       paths: [".claude/skills/**"]
       allow_sections: ["## PJ固有手順"]
 
@@ -122,7 +122,13 @@ rules:
     severity: error
     description: CLAUDE.md・.claude配下への資格情報混入禁止
     check: secret-scan
-    with: { paths: [CLAUDE.md, ".claude/**"] }
+    with:
+      paths:
+        - CLAUDE.md
+        - ".claude/**"
+        # Claude Code エージェントの一時 worktree(リポジトリ全体のコピーを含む)は対象外。
+        # guard 0.4.0 以降は .gitignore 追従で自動的に外れるが、旧 CLI でも効くよう明示する
+        - "!.claude/worktrees/**"
 
   - id: security/dangerous-permissions
     severity: error

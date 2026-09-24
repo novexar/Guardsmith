@@ -3,9 +3,9 @@
  * file-absent / max-lines / frontmatter / json-path / drift
  */
 import { readFileSync, existsSync } from "node:fs";
-import fg from "fast-glob";
 import { parse as parseYaml } from "yaml";
 import { JSONPath } from "jsonpath-plus";
+import { globFiles, type GlobScope } from "./glob.js";
 import type { Rule } from "./schema.js";
 import type { Finding } from "./lint.js";
 
@@ -13,11 +13,11 @@ import type { Finding } from "./lint.js";
 
 export async function checkFileAbsent(
   rule: Extract<Rule, { check: "file-absent" }>,
-  root: string,
+  scope: GlobScope,
 ): Promise<Finding[]> {
   const findings: Finding[] = [];
   for (const p of rule.with.paths) {
-    const hits = await fg(p, { cwd: root, dot: true });
+    const hits = await globFiles(scope, [p]);
     for (const file of hits) {
       findings.push({
         ruleId: rule.id,
@@ -35,9 +35,10 @@ export async function checkFileAbsent(
 export async function checkMaxLines(
   rule: Extract<Rule, { check: "max-lines" }>,
   root: string,
+  scope: GlobScope,
 ): Promise<Finding[]> {
   const findings: Finding[] = [];
-  const files = await fg(rule.with.path, { cwd: root, dot: true });
+  const files = await globFiles(scope, [rule.with.path]);
   for (const file of files) {
     const lines = readFileSync(`${root}/${file}`, "utf8").split("\n").length;
     if (lines > rule.with.limit) {
@@ -71,9 +72,10 @@ export function extractFrontmatter(text: string): Record<string, unknown> | null
 export async function checkFrontmatter(
   rule: Extract<Rule, { check: "frontmatter" }>,
   root: string,
+  scope: GlobScope,
 ): Promise<Finding[]> {
   const findings: Finding[] = [];
-  const files = await fg(rule.with.paths, { cwd: root, dot: true });
+  const files = await globFiles(scope, rule.with.paths);
   for (const file of files) {
     const fm = extractFrontmatter(readFileSync(`${root}/${file}`, "utf8"));
     if (fm === null) {
@@ -193,6 +195,7 @@ export async function checkJsonPath(
 export async function checkDrift(
   rule: Extract<Rule, { check: "drift" }>,
   root: string,
+  scope: GlobScope,
 ): Promise<Finding[]> {
   const findings: Finding[] = [];
   const src = rule.with.source;
@@ -205,7 +208,7 @@ export async function checkDrift(
     return findings;
   }
   const srcRoot = src.slice("file:".length);
-  const files = await fg(rule.with.paths, { cwd: root, dot: true });
+  const files = await globFiles(scope, rule.with.paths);
   for (const file of files) {
     const srcPath = `${srcRoot}/${file}`;
     if (!existsSync(srcPath)) {

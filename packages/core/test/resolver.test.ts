@@ -106,6 +106,46 @@ rules:
     expect(merged.rules.find((r) => r.id === "a/one")?.severity).toBe("info");
   });
 
+  it("concatenates ignore across extends layers and de-duplicates", async () => {
+    write(
+      BASE,
+      "ig-layer1.yaml",
+      `version: 1
+target: claude-code
+ignore: ['**/node_modules/**', 'vendor/**']
+rules: []
+`,
+    );
+    write(
+      BASE,
+      "ig-layer2.yaml",
+      `version: 1
+target: claude-code
+extends: [ 'file:./ig-layer1.yaml' ]
+ignore: ['vendor/**', '.claude/worktrees/**']
+rules: []
+`,
+    );
+    write(
+      BASE,
+      "ig-layer3.yaml",
+      `version: 1
+target: claude-code
+extends: [ 'file:./ig-layer2.yaml' ]
+ignore: ['tmp/**']
+rules: []
+`,
+    );
+    const merged = await loadPolicy(join(BASE, "ig-layer3.yaml"));
+    // 連結(後勝ち上書きではない)+ 重複除去、宣言順を維持
+    expect(merged.ignore).toEqual([
+      "**/node_modules/**",
+      "vendor/**",
+      ".claude/worktrees/**",
+      "tmp/**",
+    ]);
+  });
+
   it("detects circular extends", async () => {
     write(
       BASE,

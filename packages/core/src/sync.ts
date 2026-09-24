@@ -8,7 +8,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import fg from "fast-glob";
+import { createGlobScope, globFiles } from "./glob.js";
 import { normalizeEol, splitSections } from "./checks.js";
 import type { PolicyDocument } from "./schema.js";
 
@@ -27,10 +27,34 @@ export interface SyncPlan {
   localOnly: string[];
 }
 
+export interface SyncOptions {
+  /** ローカルの .gitignore を尊重するか(既定 true)。false で全走査に戻す */
+  gitignore?: boolean;
+}
+
 /** 復元計画を作る。policy は loadPolicy 済み(= drift source が file: 解決済み)であること */
-export async function planSync(policy: PolicyDocument, rootDir: string): Promise<SyncPlan> {
+export async function planSync(
+  policy: PolicyDocument,
+  rootDir: string,
+  options: SyncOptions = {},
+): Promise<SyncPlan> {
   const actions: SyncAction[] = [];
   const localOnly: string[] = [];
+
+  const localScope = await createGlobScope(rootDir, {
+    ignore: policy.ignore,
+    gitignore: options.gitignore,
+  });
+  // マスター(キャッシュ済み tarball)は配布物そのもので、ローカルの .gitignore や
+  // policy の ignore を適用する対象ではない。除外は .git のみ(= gitignore: false)。
+  const masterScopes = new Map<string, Awaited<ReturnType<typeof createGlobScope>>>();
+  const masterScope = async (srcRoot: string) => {
+    const cached = masterScopes.get(srcRoot);
+    if (cached) return cached;
+    const scope = await createGlobScope(srcRoot, { gitignore: false });
+    masterScopes.set(srcRoot, scope);
+    return scope;
+  };
 
   for (const rule of policy.rules) {
     if (rule.check !== "drift") continue;
@@ -41,7 +65,7 @@ export async function planSync(policy: PolicyDocument, rootDir: string): Promise
     const srcRoot = src.slice("file:".length);
     const allow = new Set(rule.with.allow_sections ?? []);
 
-    const masterFiles = await fg(rule.with.paths, { cwd: srcRoot, dot: true });
+    const masterFiles = await globFiles(await masterScope(srcRoot), rule.with.paths);
     for (const file of masterFiles) {
       // EOL(CRLF/LF)差は drift 検査と同様に差分とみなさない
       const master = normalizeEol(readFileSync(join(srcRoot, file), "utf8"));
@@ -58,7 +82,7 @@ export async function planSync(policy: PolicyDocument, rootDir: string): Promise
       }
     }
 
-    const localFiles = await fg(rule.with.paths, { cwd: rootDir, dot: true });
+    const localFiles = await globFiles(localScope, rule.with.paths);
     for (const file of localFiles) {
       if (!existsSync(join(srcRoot, file))) localOnly.push(file);
     }

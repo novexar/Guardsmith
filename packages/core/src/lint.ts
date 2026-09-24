@@ -4,7 +4,7 @@
  * 未実装checkは finding(info) として明示し、黙ってスキップしない。
  */
 import { readFileSync } from "node:fs";
-import fg from "fast-glob";
+import { createGlobScope, globFiles, type GlobScope } from "./glob.js";
 import type { PolicyDocument, Rule, Severity, Exemption } from "./schema.js";
 import {
   checkFileAbsent,
@@ -50,14 +50,25 @@ const DEFAULT_SECRET_PATTERNS: { name: string; re: RegExp }[] = [
 
 /* ---------- エンジン ---------- */
 
+export interface LintOptions {
+  /** ローカルの .gitignore を尊重するか(既定 true)。false で全走査に戻す */
+  gitignore?: boolean;
+}
+
 export async function runLint(
   policy: PolicyDocument,
   rootDir: string,
   now: Date = new Date(),
+  options: LintOptions = {},
 ): Promise<LintResult> {
+  // .gitignore の探索・読込は1回だけ。全ルールで同じスコープを使い回す
+  const scope = await createGlobScope(rootDir, {
+    ignore: policy.ignore,
+    gitignore: options.gitignore,
+  });
   const raw: Finding[] = [];
   for (const rule of policy.rules) {
-    raw.push(...(await runRule(rule, rootDir)));
+    raw.push(...(await runRule(rule, rootDir, scope)));
   }
   const findings = applyExemptions(raw, policy.exemptions, now);
 
@@ -69,35 +80,36 @@ export async function runLint(
   return { findings, ok: stats.error === 0, stats };
 }
 
-async function runRule(rule: Rule, root: string): Promise<Finding[]> {
+async function runRule(rule: Rule, root: string, scope: GlobScope): Promise<Finding[]> {
   switch (rule.check) {
     case "file-exists":
-      return checkFileExists(rule, root, rule.with.paths);
+      return checkFileExists(rule, scope, rule.with.paths);
     case "content-match":
-      return checkContentMatch(rule, root);
+      return checkContentMatch(rule, root, scope);
     case "secret-scan":
-      return checkSecretScan(rule, root);
+      return checkSecretScan(rule, root, scope);
     case "file-absent":
-      return checkFileAbsent(rule, root);
+      return checkFileAbsent(rule, scope);
     case "max-lines":
-      return checkMaxLines(rule, root);
+      return checkMaxLines(rule, root, scope);
     case "frontmatter":
-      return checkFrontmatter(rule, root);
+      return checkFrontmatter(rule, root, scope);
     case "json-path":
       return checkJsonPath(rule, root);
     case "drift":
-      return checkDrift(rule, root);
+      return checkDrift(rule, root, scope);
   }
 }
 
 /* ---------- file-exists ---------- */
 
-async function checkFileExists(rule: Rule, root: string, paths: string[]): Promise<Finding[]> {
+async function checkFileExists(rule: Rule, scope: GlobScope, paths: string[]): Promise<Finding[]> {
   const findings: Finding[] = [];
   for (const p of paths) {
     const isDir = p.endsWith("/");
     const pattern = isDir ? `${p}**` : p;
-    const hits = await fg(pattern, { cwd: root, dot: true, onlyFiles: !isDir });
+    // .gitignore 対象のパスはコミットされないため「存在しない」として扱う
+    const hits = await globFiles(scope, [pattern], { onlyFiles: !isDir });
     if (hits.length === 0) {
       findings.push({
         ruleId: rule.id,
@@ -114,9 +126,10 @@ async function checkFileExists(rule: Rule, root: string, paths: string[]): Promi
 async function checkContentMatch(
   rule: Extract<Rule, { check: "content-match" }>,
   root: string,
+  scope: GlobScope,
 ): Promise<Finding[]> {
   const findings: Finding[] = [];
-  const files = await fg(rule.with.path, { cwd: root, dot: true });
+  const files = await globFiles(scope, [rule.with.path]);
   if (files.length === 0) {
     // 対象ファイルが無い場合は file-exists の責務。ここでは info に留める
     findings.push({
@@ -159,13 +172,14 @@ async function checkContentMatch(
 async function checkSecretScan(
   rule: Extract<Rule, { check: "secret-scan" }>,
   root: string,
+  scope: GlobScope,
 ): Promise<Finding[]> {
   const findings: Finding[] = [];
   const patterns = [
     ...DEFAULT_SECRET_PATTERNS,
     ...(rule.with.extra_patterns ?? []).map((p) => ({ name: `custom: ${p}`, re: new RegExp(p) })),
   ];
-  const files = await fg(rule.with.paths, { cwd: root, dot: true });
+  const files = await globFiles(scope, rule.with.paths);
   for (const file of files) {
     const text = readFileSync(`${root}/${file}`, "utf8");
     for (const { name, re } of patterns) {

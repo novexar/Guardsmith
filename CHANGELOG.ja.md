@@ -2,6 +2,36 @@
 
 [English](CHANGELOG.md) | **日本語**
 
+## v0.5.2 (2026-09-24)
+
+`guard lint` / `guard sync` の走査対象を「**コミットされうるファイル**」に絞るリリース。
+リポジトリ直下に巨大な除外済みツリー(各自 `.venv` / `node_modules` を持つエージェント
+worktree 等)を抱える PJ で毎回その走査コストを払わなくなり、`secret-scan` が
+リポジトリに入らないファイルを報告しなくなる。既存 PJ の追随手順は docs/migration/v0.5.2.ja.md を参照。
+
+### Added
+
+- ポリシー: トップレベル `ignore` キー(glob 配列)。全走査から除外する。`rules` と違い
+  extends 間で**連結**される(重複は除去)ため、組織 overlay の除外が各 PJ に届く
+- `guard lint` / `guard sync`: `--no-gitignore` で全走査に戻す(`--no-cache` と同じ扱い)。
+  ポリシーの `ignore` と `.git/` の除外は引き続き効く
+- `@guardsmith/core`: `runLint(policy, root, now?, { gitignore })` /
+  `planSync(policy, root, { gitignore })`。新設の `glob` モジュールを公開
+
+### Changed
+
+- 全てのファイル走査が既定で `.gitignore`(入れ子の `.gitignore` も)に追従し、`.git/` を
+  常に除外するようになった。`secret-scan` は `.claude/settings.local.json` 等を走査せず、
+  `file-exists` は `.gitignore` 対象のパスを「存在しない」と扱う
+- 除外対象は**走査の時点で枝刈り**する(結果フィルタではない)。5,000 ファイルの疑似 `.venv`
+  を含む fixture で `.claude/**` の走査は 8.6ms → 0.7ms
+- baseline `security/no-secrets-in-context`: `paths` に `!.claude/worktrees/**` を追加
+  (presets/self.yaml と同じ)。旧 CLI でもエージェント worktree が除外される。
+  baseline には `ignore:` キーを**入れない** — CLI 0.3.0 の strict スキーマが未知キーを拒否するため
+- リモート参照タグ・生成物のスタンプを v0.5.2 に更新(baseline の drift source /
+  `guard new` の policy 生成 / docs 例示 / Action の `release-tag` 既定)
+- npm: `@guardsmith/core` / `@guardsmith/cli` 0.4.0(Action の `cli-version` 既定も 0.4.0)
+
 ## v0.5.1 (2026-09-16)
 
 GuardSmith ランタイム成果物(`.guardsmith/` の CI 結果 JSON、`.claude/settings.local.json`)の

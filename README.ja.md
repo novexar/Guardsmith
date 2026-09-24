@@ -83,12 +83,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: novexar/Guardsmith@v0.5.1
+      - uses: novexar/Guardsmith@v0.5.2
 ```
 
 | input              | 既定値                    | 説明                                                                                                  |
 | ------------------ | ------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `cli-version`      | `0.3.0`                   | 実行する CLI の npm バージョン                                                                        |
+| `cli-version`      | `0.4.0`                   | 実行する CLI の npm バージョン                                                                        |
 | `root` / `policy`  | `.` / `guard.policy.yaml` | 検査対象 / ポリシーファイル                                                                           |
 | `upload-sarif`     | `true`                    | Code Scanning への SARIF アップロード(GHAS の無い private では `"false"`。SARIF は artifact にも残る) |
 | `pr-comment`       | `true`                    | 失敗時の PR コメント                                                                                  |
@@ -101,7 +101,7 @@ jobs:
 添付しています。必要なのは GitHub への到達と Node.js 20+ のみで、npm レジストリには一切接続しません:
 
 ```bash
-gh release download v0.5.1 --repo novexar/Guardsmith --pattern 'guardsmith-cli-*.tar.gz'
+gh release download v0.5.2 --repo novexar/Guardsmith --pattern 'guardsmith-cli-*.tar.gz'
 tar -xzf guardsmith-cli-*.tar.gz
 node guardsmith-cli/guard.mjs lint
 ```
@@ -117,9 +117,10 @@ node guardsmith-cli/guard.mjs lint
 version: 1
 target: claude-code
 extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v0.5.1
+  - github:novexar/guardsmith//presets/baseline.yaml@v0.5.2
   # フロントエンドを持つプロジェクトはさらに:
-  # - github:novexar/guardsmith//presets/frontend.yaml@v0.5.1
+  # - github:novexar/guardsmith//presets/frontend.yaml@v0.5.2
+ignore: [] # 全走査から除外する glob(extends 間で連結される)
 rules: [] # 追加・上書き(同じ id の再定義=上書き)
 exemptions: [] # 期限付き例外(reason + approved_by + expires 必須)
 ```
@@ -134,21 +135,34 @@ exemptions: [] # 期限付き例外(reason + approved_by + expires 必須)
 - 3層モデル(OSS baseline → 組織 private overlay → プロジェクト)の設計は
   [docs/LAYERING.md](docs/LAYERING.md) を参照
 
+### 走査の対象
+
+各 check は「**コミットされうるファイル**」を対象にします:
+
+- 既定で `.gitignore`(入れ子の `.gitignore` も)に追従し、`.git/` は常に除外します。
+  したがって `secret-scan` は `.claude/settings.local.json` の中身を報告せず、
+  `file-exists` は `.gitignore` 対象のパスを「存在しない」と扱います(リポジトリに入らないため)
+- さらにポリシーのトップレベル `ignore`(glob)を除外します。`rules` と違い extends 間で
+  **連結**されるため、組織 overlay 側の除外が各 PJ に届きます
+- 除外対象は**走査の時点で枝刈り**します(結果フィルタではありません)。エージェント worktree や
+  `node_modules`、virtualenv を抱えるリポジトリでも実行時間が伸びません
+- `--no-gitignore` で全走査に戻せます(除外されたファイルの中身を点検したいとき)
+
 ## コマンド一覧
 
-| コマンド                  | 説明                                                                       |
-| ------------------------- | -------------------------------------------------------------------------- |
-| `guard new <dir>`         | 標準マスターから新規プロジェクトを展開                                     |
-| `guard init`              | カレントに `guard.policy.yaml` を生成                                      |
-| `guard lint`              | 検査。`--format sarif\|json`、`--out <file>`、`--no-cache`、`--root <dir>` |
-| `guard sync`              | 乖離の表示(dry-run)。`--write` でマスター内容へ復元                        |
-| `guard explain <rule-id>` | ルールの意図を表示                                                         |
-| `guard version`           | CLI と標準のバージョンを表示                                               |
+| コマンド                  | 説明                                                                                         |
+| ------------------------- | -------------------------------------------------------------------------------------------- |
+| `guard new <dir>`         | 標準マスターから新規プロジェクトを展開                                                       |
+| `guard init`              | カレントに `guard.policy.yaml` を生成                                                        |
+| `guard lint`              | 検査。`--format sarif\|json`、`--out <file>`、`--no-cache`、`--no-gitignore`、`--root <dir>` |
+| `guard sync`              | 乖離の表示(dry-run)。`--write` で復元、`--no-gitignore` で全走査                             |
+| `guard explain <rule-id>` | ルールの意図を表示                                                                           |
+| `guard version`           | CLI と標準のバージョンを表示                                                                 |
 
 ## 標準のアップグレード
 
 既存プロジェクトはタグ固定のため、何もしなくても壊れません。新しい標準リリースへ追随する
-際は [docs/migration/v0.5.0.ja.md](docs/migration/v0.5.0.ja.md) のチェックリストに従ってください
+際は [docs/migration/v0.5.2.ja.md](docs/migration/v0.5.2.ja.md) のチェックリストに従ってください
 ——各項目は任意・独立で、段階適用できます。
 
 ## 謝辞・クレジット
@@ -160,7 +174,7 @@ exemptions: [] # 期限付き例外(reason + approved_by + expires 必須)
 - 標準スタックとして参照・推奨しているエコシステムへの敬意: shadcn/ui、Tremor、
   TanStack(Router/Query/Table)、Tailwind CSS、cmdk — コードの同梱はなく、
   各 PJ が各自のライセンスで導入します
-- 主要ランタイム依存: zod、yaml、fast-glob、jsonpath-plus、node-tar — 各パッケージの
+- 主要ランタイム依存: zod、yaml、fast-glob、ignore、jsonpath-plus、node-tar — 各パッケージの
   ライセンスに基づき利用(オフラインバンドルには `THIRD-PARTY-NOTICES.md` を同梱)
 
 ## ライセンス・コントリビュート

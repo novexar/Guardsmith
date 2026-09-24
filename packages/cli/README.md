@@ -51,6 +51,22 @@ npx @guardsmith/cli explain claude-md/thin-diff
 npx @guardsmith/cli version
 ```
 
+| Command                   | Key flags                                                                                      |
+| ------------------------- | ---------------------------------------------------------------------------------------------- |
+| `guard new <dir>`         | —                                                                                              |
+| `guard init`              | —                                                                                              |
+| `guard lint`              | `--root`, `--policy`, `--format console\|sarif\|json`, `--out`, `--no-cache`, `--no-gitignore` |
+| `guard sync`              | `--root`, `--policy`, `--write`, `--no-cache`, `--no-gitignore`                                |
+| `guard explain <rule-id>` | —                                                                                              |
+| `guard version`           | —                                                                                              |
+
+Checks operate on **files that could be committed**: `.gitignore` (nested files included)
+is honoured by default and `.git/` is always excluded, so `secret-scan` never reports a
+value inside `.claude/settings.local.json`, and `file-exists` treats a `.gitignore`'d path
+as missing. The policy's `ignore` globs are excluded on top of that, and excluded trees are
+pruned during traversal rather than filtered afterwards. `--no-gitignore` restores the full
+scan when you want to audit ignored files.
+
 After `guard new`, open the project with Claude Code — the bundled `init-project` skill
 interviews you and concretizes the templates. `guard lint` passes once initialization
 is genuinely complete.
@@ -62,9 +78,10 @@ is genuinely complete.
 version: 1
 target: claude-code
 extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v0.5.1 # tag pinning is mandatory
+  - github:novexar/guardsmith//presets/baseline.yaml@v0.5.2 # tag pinning is mandatory
   # Projects with a frontend also add:
-  # - github:novexar/guardsmith//presets/frontend.yaml@v0.5.1
+  # - github:novexar/guardsmith//presets/frontend.yaml@v0.5.2
+ignore: [] # globs excluded from every scan (concatenated across extends layers)
 rules: [] # add or override (redefining an id overrides it)
 exemptions: [] # time-boxed waivers: reason + approved_by + expires required
 ```
@@ -80,7 +97,7 @@ Add one line to your workflow using the
 [GuardSmith Lint Action](https://github.com/marketplace/actions/guardsmith-lint):
 
 ```yaml
-- uses: novexar/Guardsmith@v0.5.1
+- uses: novexar/Guardsmith@v0.5.2
 ```
 
 Violating PRs fail with a summary comment and a SARIF report. Air-gapped environments can

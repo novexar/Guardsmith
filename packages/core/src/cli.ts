@@ -2,8 +2,8 @@
 /**
  * GuardSmith CLI
  *   guard init                     # guard.policy.yaml を生成(30秒体験の入口)
- *   guard lint [--root <dir>] [--policy <file>] [--format console|sarif|json] [--out <file>] [--no-cache]
- *   guard sync [--root <dir>] [--policy <file>] [--write] [--no-cache]   # 既定は dry-run
+ *   guard lint [--root <dir>] [--policy <file>] [--format console|sarif|json] [--out <file>] [--no-cache] [--no-gitignore]
+ *   guard sync [--root <dir>] [--policy <file>] [--write] [--no-cache] [--no-gitignore]   # 既定は dry-run
  *   guard new <dir>                # standards/ 一式から新規PJ雛形を展開
  *   guard explain <rule-id>
  * exit code: 0 = pass / 1 = error検出 / 2 = 実行エラー
@@ -24,13 +24,13 @@ import { ASSET_ROOT } from "./paths.js";
 import { loadPolicy, toSarif } from "./resolver.js";
 import { applySync, formatPlan, planSync } from "./sync.js";
 
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
 
 /**
  * guard new が参照する標準(standards/ + baseline)のタグ。
  * npm パッケージ版(VERSION)とは独立に、標準の内容が変わったリリースでのみ上げる。
  */
-const STANDARDS_TAG = "0.5.1";
+const STANDARDS_TAG = "0.5.2";
 
 const INIT_TEMPLATE = `version: 1
 target: claude-code
@@ -100,6 +100,8 @@ interface Flags {
   format: "console" | "sarif" | "json";
   out?: string;
   noCache: boolean;
+  /** .gitignore に追従しない(= 全走査に戻す) */
+  noGitignore: boolean;
   write: boolean;
 }
 
@@ -109,6 +111,7 @@ function parseFlags(args: string[]): Flags {
     policy: "guard.policy.yaml",
     format: "console",
     noCache: false,
+    noGitignore: false,
     write: false,
   };
   for (let i = 0; i < args.length; i++) {
@@ -118,6 +121,7 @@ function parseFlags(args: string[]): Flags {
     else if (a === "--format") f.format = args[++i] as Flags["format"];
     else if (a === "--out") f.out = args[++i];
     else if (a === "--no-cache") f.noCache = true;
+    else if (a === "--no-gitignore") f.noGitignore = true;
     else if (a === "--write") f.write = true;
     else throw new Error(`unknown flag: ${a}`);
   }
@@ -133,7 +137,9 @@ async function lint(f: Flags): Promise<number> {
     return 2;
   }
   const policy = await loadPolicy(policyPath, { noCache: f.noCache });
-  const result = await runLint(policy, resolve(f.root));
+  const result = await runLint(policy, resolve(f.root), new Date(), {
+    gitignore: !f.noGitignore,
+  });
 
   const output =
     f.format === "sarif"
@@ -159,7 +165,7 @@ async function sync(f: Flags): Promise<number> {
     return 2;
   }
   const policy = await loadPolicy(policyPath, { noCache: f.noCache });
-  const plan = await planSync(policy, resolve(f.root));
+  const plan = await planSync(policy, resolve(f.root), { gitignore: !f.noGitignore });
   if (f.write) applySync(plan, resolve(f.root));
   console.log(formatPlan(plan, f.write));
   return 0;

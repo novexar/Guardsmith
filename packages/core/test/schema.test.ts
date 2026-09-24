@@ -71,6 +71,22 @@ describe("policy schema", () => {
     ).toBe(false);
   });
 
+  it("accepts a top-level ignore array and defaults it to []", () => {
+    const r = bad({ ignore: [".claude/worktrees/**", "vendor/**"] });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.policy.ignore).toEqual([".claude/worktrees/**", "vendor/**"]);
+
+    const d = bad({});
+    expect(d.ok).toBe(true);
+    if (d.ok) expect(d.policy.ignore).toEqual([]);
+  });
+
+  it("rejects a non-array ignore", () => {
+    expect(bad({ ignore: ".claude/worktrees/**" }).ok).toBe(false);
+    expect(bad({ ignore: [1] }).ok).toBe(false);
+    expect(bad({ ignore: [""] }).ok).toBe(false);
+  });
+
   it("accepts pinned github extends and file drift source", () => {
     const r = bad({
       extends: ["github:novexar/guardsmith//presets/baseline.yaml@v0.1.0"],

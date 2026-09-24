@@ -84,12 +84,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: novexar/Guardsmith@v0.5.1
+      - uses: novexar/Guardsmith@v0.5.2
 ```
 
 | Input              | Default                   | Description                                                                                                         |
 | ------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `cli-version`      | `0.3.0`                   | npm version of the CLI to run                                                                                       |
+| `cli-version`      | `0.4.0`                   | npm version of the CLI to run                                                                                       |
 | `root` / `policy`  | `.` / `guard.policy.yaml` | Directory / policy file to lint                                                                                     |
 | `upload-sarif`     | `true`                    | Upload SARIF to Code Scanning (set `"false"` on private repos without GHAS; the SARIF is still kept as an artifact) |
 | `pr-comment`       | `true`                    | Post a summary comment when lint fails                                                                              |
@@ -103,7 +103,7 @@ A self-contained bundle (all dependencies included) is attached to every
 Node.js 20+ are required — the npm registry is never contacted:
 
 ```bash
-gh release download v0.5.1 --repo novexar/Guardsmith --pattern 'guardsmith-cli-*.tar.gz'
+gh release download v0.5.2 --repo novexar/Guardsmith --pattern 'guardsmith-cli-*.tar.gz'
 tar -xzf guardsmith-cli-*.tar.gz
 node guardsmith-cli/guard.mjs lint
 ```
@@ -119,9 +119,10 @@ A project policy is a few lines of YAML with pinned remote references:
 version: 1
 target: claude-code
 extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v0.5.1
+  - github:novexar/guardsmith//presets/baseline.yaml@v0.5.2
   # Projects with a frontend also add:
-  # - github:novexar/guardsmith//presets/frontend.yaml@v0.5.1
+  # - github:novexar/guardsmith//presets/frontend.yaml@v0.5.2
+ignore: [] # globs excluded from every scan (concatenated across extends layers)
 rules: [] # add or override rules (redefining an id overrides it)
 exemptions: [] # time-boxed waivers: reason + approved_by + expires required
 ```
@@ -136,22 +137,37 @@ exemptions: [] # time-boxed waivers: reason + approved_by + expires required
 - The 3-layer model (OSS baseline → private org overlay → project) is described in
   [docs/LAYERING.md](docs/LAYERING.md)
 
+### What gets scanned
+
+Checks operate on **files that could be committed**:
+
+- `.gitignore` is honoured by default, nested `.gitignore` files included, and `.git/` is
+  always excluded. So `secret-scan` never reports a value inside
+  `.claude/settings.local.json`, and `file-exists` treats a `.gitignore`'d path as missing —
+  it will never reach the repository
+- The policy's top-level `ignore` globs are excluded on top of that. Unlike `rules`, they
+  are **concatenated** across `extends` layers, so an organization overlay's exclusions
+  reach every project
+- Excluded trees are **pruned during traversal**, not filtered afterwards — repositories
+  carrying agent worktrees, `node_modules` or virtualenvs stay fast
+- `--no-gitignore` restores the full scan, to audit what is sitting in ignored files
+
 ## Commands
 
-| Command                   | Description                                                                  |
-| ------------------------- | ---------------------------------------------------------------------------- |
-| `guard new <dir>`         | Scaffold a new project from the standards master                             |
-| `guard init`              | Generate `guard.policy.yaml` in the current directory                        |
-| `guard lint`              | Verify. `--format sarif\|json`, `--out <file>`, `--no-cache`, `--root <dir>` |
-| `guard sync`              | Show drift (dry-run); `--write` restores master content                      |
-| `guard explain <rule-id>` | Explain a rule                                                               |
-| `guard version`           | Show CLI and standards versions                                              |
+| Command                   | Description                                                                                    |
+| ------------------------- | ---------------------------------------------------------------------------------------------- |
+| `guard new <dir>`         | Scaffold a new project from the standards master                                               |
+| `guard init`              | Generate `guard.policy.yaml` in the current directory                                          |
+| `guard lint`              | Verify. `--format sarif\|json`, `--out <file>`, `--no-cache`, `--no-gitignore`, `--root <dir>` |
+| `guard sync`              | Show drift (dry-run); `--write` restores master content, `--no-gitignore` scans everything     |
+| `guard explain <rule-id>` | Explain a rule                                                                                 |
+| `guard version`           | Show CLI and standards versions                                                                |
 
 ## Upgrading standards
 
 Existing projects are tag-pinned and keep working untouched. When you are ready to adopt a
 new standards release, follow the step-by-step checklist in
-[docs/migration/v0.5.0.md](docs/migration/v0.5.0.md) — every step is optional and independent.
+[docs/migration/v0.5.2.md](docs/migration/v0.5.2.md) — every step is optional and independent.
 
 ## Acknowledgements
 
@@ -162,7 +178,7 @@ new standards release, follow the step-by-step checklist in
 - With respect to the ecosystems the standards reference and recommend: shadcn/ui, Tremor,
   TanStack (Router/Query/Table), Tailwind CSS, cmdk — no code is bundled; each project
   adopts them under their own licenses
-- Key runtime dependencies: zod, yaml, fast-glob, jsonpath-plus, node-tar — used under
+- Key runtime dependencies: zod, yaml, fast-glob, ignore, jsonpath-plus, node-tar — used under
   each package's license (the offline bundle ships with a `THIRD-PARTY-NOTICES.md`)
 
 ## License & contributing

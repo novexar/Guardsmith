@@ -1,6 +1,6 @@
 {
   "name": "@guardsmith/core",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "GuardSmith rule engine + CLI core (guard init / lint / sync / new / explain)",
   "license": "Apache-2.0",
   "repository": {
@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "fast-glob": "^3.3.3",
+    "ignore": "^7.0.6",
     "jsonpath-plus": "^10.4.0",
     "tar": "^7.5.22",
     "yaml": "^2.9.0",

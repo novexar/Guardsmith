@@ -188,6 +188,11 @@ export const PolicyDocument = z
     version: z.literal(1),
     target: Target,
     extends: z.array(ExtendsRef).optional(),
+    /**
+     * 走査対象から除外する glob。extends では「連結」される(rules のような後勝ち上書きではない)。
+     * 巨大な無関係ディレクトリ(エージェント用 worktree・.venv 等)の走査を止める用途。
+     */
+    ignore: z.array(NonEmpty).default([]),
     rules: z.array(Rule).default([]),
     exemptions: z.array(Exemption).default([]),
     output: z

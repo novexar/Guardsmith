@@ -1,6 +1,9 @@
 /**
  * ポリシー読込と extends 解決 (preset: / file: / github: 対応)
- * マージ規則: extends を宣言順に適用 → ローカル rules が同一idを上書き。exemptionsは連結。
+ * マージ規則: extends を宣言順に適用 → ローカル rules が同一idを上書き。
+ *   - rules: id をキーに後勝ち上書き(Layer3 > Layer2 > Layer1)
+ *   - exemptions: 連結(どの層の例外も有効。期限は必須)
+ *   - ignore: 連結(宣言順を保ち重複のみ除去。上書きではない)
  * extends は多段解決する(Layer3 → Layer2 → Layer1 の3層運用)。循環はエラー。
  * drift の github: source はキャッシュ取得後に file: へ解決してから返す。
  */
@@ -31,6 +34,7 @@ async function resolveDoc(
 ): Promise<PolicyDocument> {
   const merged = new Map<string, Rule>();
   const exemptions: Exemption[] = [];
+  const ignore: string[] = [];
 
   for (const ref of doc.extends ?? []) {
     const loaded = await loadRef(ref, baseDir, opts);
@@ -43,11 +47,14 @@ async function resolveDoc(
     const base = await resolveDoc(loaded.doc, loaded.baseDir, opts, new Set([...seen, loaded.key]));
     for (const r of base.rules) merged.set(r.id, r);
     exemptions.push(...base.exemptions);
+    ignore.push(...base.ignore);
   }
   for (const r of doc.rules) merged.set(r.id, r); // ローカル優先(後勝ち)
   exemptions.push(...doc.exemptions);
+  ignore.push(...doc.ignore);
 
-  return { ...doc, rules: [...merged.values()], exemptions };
+  // ignore は連結。重複だけ除いて宣言順を保つ
+  return { ...doc, rules: [...merged.values()], exemptions, ignore: [...new Set(ignore)] };
 }
 
 interface LoadedRef {
@@ -126,7 +133,7 @@ export function toSarif(result: LintResult, policy: PolicyDocument): string {
           driver: {
             name: "guardsmith",
             informationUri: "https://github.com/novexar/Guardsmith",
-            version: "0.3.0",
+            version: "0.4.0",
             rules: ruleIds.map((id) => {
               const rule = policy.rules.find((r) => r.id === id);
               return {

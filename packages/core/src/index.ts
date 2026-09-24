@@ -1,5 +1,6 @@
 /** @guardsmith/core 公開API */
 export * from "./schema.js";
+export * from "./glob.js";
 export * from "./lint.js";
 export * from "./checks.js";
 export * from "./resolver.js";
