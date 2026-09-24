@@ -6,6 +6,7 @@
 import { readFileSync } from "node:fs";
 import { createGlobScope, globFiles, type GlobScope } from "./glob.js";
 import type { PolicyDocument, Rule, Severity, Exemption } from "./schema.js";
+import { checkImportBudget } from "./import-budget.js";
 import {
   checkFileAbsent,
   checkMaxLines,
@@ -92,6 +93,8 @@ async function runRule(rule: Rule, root: string, scope: GlobScope): Promise<Find
       return checkFileAbsent(rule, scope);
     case "max-lines":
       return checkMaxLines(rule, root, scope);
+    case "import-budget":
+      return checkImportBudget(rule, root, scope);
     case "frontmatter":
       return checkFrontmatter(rule, root, scope);
     case "json-path":

@@ -17,7 +17,7 @@
 | 言語/ランタイム | TypeScript (strict) / Node.js >= 20           |
 | パッケージ管理  | pnpm workspace                                |
 | スキーマ検証    | zod                                           |
-| テスト          | vitest + @vitest/coverage-v8(80%ゲート)       |
+| テスト          | vitest + `@vitest/coverage-v8`(80%ゲート)     |
 | Lint/Format     | eslint (flat config) + prettier               |
 | CI              | GitHub Actions(lint/typecheck/test/self-lint) |
 

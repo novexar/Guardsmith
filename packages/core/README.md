@@ -6,7 +6,7 @@
 
 <p align="center">
   The rule engine behind <a href="https://github.com/novexar/Guardsmith">GuardSmith</a> —
-  policy validation, 8 check types, tag-pinned remote resolution, and SARIF output.
+  policy validation, 9 check types, tag-pinned remote resolution, and SARIF output.
 </p>
 
 <p align="center">
@@ -24,8 +24,10 @@
 
 - **Policy schema** — strict zod validation of `guard.policy.yaml` / preset YAML
   (unknown keys are rejected; typos become errors)
-- **8 check types** — file-exists / file-absent / content-match / max-lines / frontmatter /
-  json-path / drift / secret-scan
+- **9 check types** — file-exists / file-absent / content-match / max-lines / import-budget /
+  frontmatter / json-path / drift / secret-scan. `import-budget` measures the resident context
+  of a `CLAUDE.md` including everything its `@path` imports pull in (rough `chars / 4` token
+  estimate; see the [main README](https://github.com/novexar/Guardsmith#claudemd-import-budget))
 - **Remote resolution** — `extends: github:owner/repo[//path]@tag` with mandatory tag pinning,
   local caching, multi-level composition, cycle detection, and path-traversal hardening
 - **Scan scope** — `.gitignore` (nested files included) is honoured by default and `.git/`

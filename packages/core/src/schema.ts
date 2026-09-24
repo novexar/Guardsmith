@@ -86,6 +86,23 @@ const MaxLines = z.object({
   with: z.object({ path: NonEmpty, limit: z.number().int().positive() }).strict(),
 });
 
+/**
+ * import-budget: CLAUDE.md 本体 + `@` インポート先の常駐量を測る。
+ * max_depth の既定は公式仕様の上限(four hops)= DEFAULT_IMPORT_MAX_DEPTH。
+ */
+const ImportBudget = z.object({
+  check: z.literal("import-budget"),
+  with: z
+    .object({
+      path: NonEmpty, // glob可(通常は CLAUDE.md)
+      /** 本体 + インポート先の合計文字数の上限。超過で rule の severity の finding */
+      max_chars: z.number().int().positive().optional(),
+      /** 再帰インポートを追う深さの上限(省略時 4) */
+      max_depth: z.number().int().positive().optional(),
+    })
+    .strict(),
+});
+
 const Frontmatter = z.object({
   check: z.literal("frontmatter"),
   with: z
@@ -159,6 +176,7 @@ export const Rule = z
     FileAbsent,
     ContentMatch,
     MaxLines,
+    ImportBudget,
     Frontmatter,
     JsonPath,
     Drift,

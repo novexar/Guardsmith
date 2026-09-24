@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/novexar/Guardsmith">GuardSmith</a> を支えるルールエンジン —
-  ポリシー検証、8 種の check、タグ固定リモート解決、SARIF 出力。
+  ポリシー検証、9 種の check、タグ固定リモート解決、SARIF 出力。
 </p>
 
 <p align="center">
@@ -24,8 +24,10 @@
 
 - **ポリシースキーマ** — `guard.policy.yaml` / preset YAML の厳格な zod 検証
   (未知のキーは拒否。typo はエラーになる)
-- **8 種の check** — file-exists / file-absent / content-match / max-lines / frontmatter /
-  json-path / drift / secret-scan
+- **9 種の check** — file-exists / file-absent / content-match / max-lines / import-budget /
+  frontmatter / json-path / drift / secret-scan。`import-budget` は `CLAUDE.md` と
+  `@path` インポート先を合わせた常駐量を測る(トークン数は `chars / 4` の粗い目安。
+  詳細は [メイン README](https://github.com/novexar/Guardsmith/blob/main/README.ja.md))
 - **リモート解決** — `extends: github:owner/repo[//path]@tag`。タグ固定必須、
   ローカルキャッシュ、多段合成、循環検出、パストラバーサル対策
 - **走査範囲** — 既定で `.gitignore`(入れ子も)に追従し `.git/` を常に除外するため、

@@ -32,7 +32,7 @@ GuardSmith treats AI development standards the way ESLint treats code style —
 - **Distribute** — `guard new` scaffolds a new project from a standards master
   (`CLAUDE.md`, agents, skills, docs, CI setup, design spec)
 - **Verify** — `guard lint` checks any project against a YAML policy
-  (8 check types; uninitialized templates, broken contract headings, leaked credentials, drift, and more)
+  (9 check types; uninitialized templates, broken contract headings, leaked credentials, drift, CLAUDE.md import budget, and more)
 - **Repair** — `guard sync` detects drift from the master and restores it,
   while preserving the sections each project is allowed to customize
 - **Enforce in CI** — the [GuardSmith Lint Action](https://github.com/marketplace/actions/guardsmith-lint)
@@ -137,6 +137,39 @@ exemptions: [] # time-boxed waivers: reason + approved_by + expires required
 - The 3-layer model (OSS baseline → private org overlay → project) is described in
   [docs/LAYERING.md](docs/LAYERING.md)
 
+### CLAUDE.md import budget
+
+`CLAUDE.md` pulls whole files into context at launch with `@path` imports, so a 60-line
+`CLAUDE.md` that imports five documents is not a small `CLAUDE.md`. Line counts
+(`claude-md/thin-diff`) cannot see that, so `import-budget` measures the **resident total**:
+the entry file plus every file it reaches through `@` imports.
+
+```yaml
+- id: claude-md/import-budget
+  severity: warn
+  check: import-budget
+  with:
+    path: CLAUDE.md # glob allowed; one report per matched entry file
+    max_chars: 32000 # optional: exceeding it reports at the rule's severity
+    max_depth: 4 # optional: how many import hops to follow (default 4)
+```
+
+It always emits one `info` per entry file —
+`resident context: N files, X chars (≈Y tokens, rough estimate)` followed by a per-file
+breakdown (largest first, top 10 plus an `others` line). **The token figure is a rough
+`chars / 4` estimate, not a measurement**; use it for orders of magnitude only.
+Additional `info` findings flag imports that do not contribute: `unresolved import:`,
+`import cycle detected:`, `import depth limit exceeded`, and `import outside root, not
+measured` (references reaching outside the scan root via `..`, an absolute path or `~/`
+are reported, never read).
+
+Import semantics follow
+[the Claude Code memory docs](https://code.claude.com/docs/en/memory) (checked 2026-09-24):
+`@path` is recognized anywhere in the file, relative paths resolve against the directory of
+the file containing them, recursion is capped at four hops, and `@` inside code spans or
+fenced code blocks is not an import — wrap a path in backticks to mention it without
+importing it.
+
 ### What gets scanned
 
 Checks operate on **files that could be committed**:
@@ -150,7 +183,7 @@ Checks operate on **files that could be committed**:
   carrying agent worktrees, `node_modules` or virtualenvs stay fast
 - `--no-gitignore` restores the full scan, to audit what is sitting in ignored files
 
-Seven of the eight checks enumerate files with globs and therefore follow `.gitignore`.
+Eight of the nine checks enumerate files with globs and therefore follow `.gitignore`.
 `json-path` reads one fixed path directly and is the only exception:
 
 | Check           | Follows `.gitignore` | What it means for a `.gitignore`'d path                                                                              |
@@ -159,6 +192,7 @@ Seven of the eight checks enumerate files with globs and therefore follow `.giti
 | `file-absent`   | yes                  | Counts as **absent** → no finding, even if the file is on disk                                                       |
 | `content-match` | yes                  | Not scanned (an empty match set is reported as `info`)                                                               |
 | `max-lines`     | yes                  | Not scanned                                                                                                          |
+| `import-budget` | entry files only     | Not used as an entry file; still measured when an `@` import points at it explicitly                                 |
 | `frontmatter`   | yes                  | Not scanned                                                                                                          |
 | `drift`         | yes                  | Not compared against the master                                                                                      |
 | `secret-scan`   | yes                  | Not scanned — no finding from `.claude/settings.local.json` and friends                                              |

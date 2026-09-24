@@ -3,6 +3,7 @@ export * from "./schema.js";
 export * from "./glob.js";
 export * from "./lint.js";
 export * from "./checks.js";
+export * from "./import-budget.js";
 export * from "./resolver.js";
 export * from "./remote.js";
 export * from "./sync.js";
