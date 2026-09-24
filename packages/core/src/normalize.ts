@@ -72,7 +72,7 @@ export function stripGenComments(text: string): string {
   for (;;) {
     const open = text.indexOf("<!--", scan);
     if (open < 0) break;
-    const close = text.indexOf("-->", open + 4);
+    const close = findCommentClose(text, open + 4);
     if (close < 0) break; // 閉じていないコメントは本文として扱う
     const end = close + 3;
     if (!/\bgen:/.test(text.slice(open + 4, close))) {
@@ -86,6 +86,31 @@ export function stripGenComments(text: string): string {
   }
   parts.push(text.slice(kept));
   return collapseBlankRuns(parts.join(""));
+}
+
+/**
+ * コメントの終端 `-->` を探す。
+ *
+ * 素朴に最短の `-->` を採ると standards/CLAUDE.md の生成規約バナーを切り損ねる。
+ * あのバナーは gen コメントの書式そのものを `` `<!-- gen: ... -->` `` と例示しており、
+ * 引用された `-->` を終端と誤認すると **バナーの後半が本文へ漏れ出す**。
+ * そこでインラインコードスパン内の `-->` は終端とみなさない。
+ */
+function findCommentClose(text: string, from: number): number {
+  let at = text.indexOf("-->", from);
+  while (at >= 0) {
+    if (!inCodeSpan(text, at)) return at;
+    at = text.indexOf("-->", at + 3);
+  }
+  return -1;
+}
+
+/** 同じ行の先行バックティックが奇数個なら、その位置はインラインコードスパンの中 */
+function inCodeSpan(text: string, index: number): boolean {
+  const lineStart = text.lastIndexOf("\n", index) + 1;
+  let ticks = 0;
+  for (let i = lineStart; i < index; i++) if (text[i] === "`") ticks++;
+  return ticks % 2 === 1;
 }
 
 /** 空行が 3 連続以上になったら 2 連続へ畳む(gen コメント除去の後始末) */

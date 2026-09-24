@@ -96,7 +96,11 @@ function toDiff3Label(labels: Readonly<Merge3Labels> | undefined) {
   return labels === undefined ? {} : { a: labels.ours, o: labels.base, b: labels.theirs };
 }
 
-/** ours に CRLF が 1 つでもあれば CRLF ファイルとみなす */
+/**
+ * ours に CRLF が 1 つでもあれば CRLF ファイルとみなす。
+ * EOL 混在ファイルは出力が CRLF へ揃うため、変更行以外も差分になる点に注意
+ * (混在はそもそも事故であり、揃える方が望ましいと判断している)。
+ */
 export function detectEol(text: string): Eol {
   return text.includes("\r\n") ? "\r\n" : "\n";
 }

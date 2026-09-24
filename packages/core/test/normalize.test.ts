@@ -143,6 +143,20 @@ const EXPECTED_KEYS: Readonly<Record<string, readonly string[]>> = {
   ".claude/agents/qa-engineer.md": ["E2E_TOOL", "ISSUE_LABELS", "PROJECT_NAME", "TEST_COMMANDS"],
 };
 
+/**
+ * 対応する `<!--` を持たない `-->` が残っていないか。
+ * gen コメントを途中で切ってしまうと、バナーの後半が本文へ漏れて必ずここに現れる。
+ */
+function hasDanglingCommentClose(text: string): boolean {
+  let from = 0;
+  for (;;) {
+    const close = text.indexOf("-->", from);
+    if (close < 0) return false;
+    if (text.lastIndexOf("<!--", close) < from) return true;
+    from = close + 3;
+  }
+}
+
 async function standardsScopeFiles(): Promise<string[]> {
   const root = join(REPO_ROOT, "standards");
   // マスターは配布物そのもの。除外は .git のみ(= sync.ts と同じ扱い)
@@ -213,6 +227,26 @@ describe("stripGenComments", () => {
   it("leaves an unterminated comment untouched", () => {
     const text = "a\n<!-- gen: never closed\nb\n";
     expect(stripGenComments(text)).toBe(text);
+  });
+
+  // 回帰: standards/CLAUDE.md の生成規約バナーは gen コメントの書式自体を引用している。
+  // 引用された `-->` を終端と誤認するとバナー後半が本文へ漏れ出す。
+  it("does not treat a --> quoted inside a code span as the comment close", () => {
+    const text = [
+      "<!-- ============================================================",
+      "  gen: 生成規約:",
+      "  2. `<!-- gen: ... -->` コメントは生成指示。完成版からは削除する。",
+      "  5. 末尾の standards バージョンコメントは維持する。",
+      "============================================================ -->",
+      "# 本文",
+      "",
+    ].join("\n");
+    expect(stripGenComments(text)).toBe("# 本文\n");
+  });
+
+  it("still closes at a --> that merely follows a closed code span", () => {
+    const text = "<!-- gen: `code` -->\n# 本文\n";
+    expect(stripGenComments(text)).toBe("# 本文\n");
   });
 });
 
@@ -335,6 +369,22 @@ describe("standards/ ゴールデン", () => {
       const res = normalizeMaster(raw, { vars, stamp: stampFor("v0.6.0") });
       expect(res.unresolved, `${file} has unexpected placeholders`).toEqual([]);
       expect(res.text, `${file} still contains a placeholder`).not.toMatch(/\{\{|<!-- gen:/);
+      // キー集合だけでは gen バナーの切り損ね(本文への漏れ出し)を検知できない
+      expect(hasDanglingCommentClose(res.text), `${file} leaked a gen comment tail`).toBe(false);
     }
+  });
+
+  // 回帰: 生成規約バナーが丸ごと消え、本文が見出しから始まること
+  it("normalizes standards/CLAUDE.md down to its body with no banner residue", () => {
+    const raw = readFileSync(join(REPO_ROOT, "standards", "CLAUDE.md"), "utf8");
+    const res = normalizeMaster(raw, {
+      vars: { PROJECT_NAME: "Acme" },
+      stamp: stampFor("v0.6.0"),
+    });
+    expect(res.text.startsWith("# CLAUDE.md — Acme\n")).toBe(true);
+    expect(res.text).not.toContain("生成規約");
+    expect(res.text).not.toContain("============");
+    expect(res.text).not.toContain("未初期化テンプレート");
+    expect(res.text.trimEnd().endsWith("<!-- standards: novexar/guardsmith v0.6.0 -->")).toBe(true);
   });
 });

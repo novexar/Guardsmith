@@ -489,7 +489,7 @@ describe("planSync3 / applySync3", () => {
     const plan = await planSync3(sources(oldRoot, newRoot, ["docs/**"]), proj, VARS);
     const action = plan.actions.find((a) => a.file === "docs/logo.svg");
     expect(action?.kind).toBe("conflict");
-    expect(action?.note).toBe("binary/non-markdown master changed");
+    expect(action?.note).toBe("non-markdown master changed — resolve manually");
     applySync3(plan, proj, VARS);
     expect(readFileSync(join(proj, "docs/logo.svg"), "utf8")).toBe("<svg>Acme Portal</svg>\n");
   });
@@ -508,6 +508,67 @@ describe("planSync3 / applySync3", () => {
     const plan = await planSync3(sources(oldRoot, newRoot, ["docs/**/*.md"]), proj, VARS);
     expect(kindOf(plan, "docs/NEW.md")).toBe("conflict");
     expect(plan.conflicted).toEqual(["docs/NEW.md"]);
+  });
+
+  // 回帰: markers 指定を content の有無から推測すると、マーカーを作れない衝突しか
+  // 無いときに「指定したのに 1 ファイルも書かれない」事故になる
+  it("still writes clean merges under conflictMarkers when a conflict cannot carry markers", async () => {
+    const oldRoot = fixtureDir("gs-sync3-mix-old");
+    const newRoot = fixtureDir("gs-sync3-mix-new");
+    write(oldRoot, "docs/A.md", "# A\n\n標準の本文。\n");
+    write(oldRoot, "docs/logo.svg", "<svg>old</svg>\n");
+    write(newRoot, "docs/A.md", "# A\n\n標準の本文(更新)。\n");
+    write(newRoot, "docs/logo.svg", "<svg>new</svg>\n");
+    const proj = fixtureDir("gs-sync3-mix-proj");
+    write(proj, "docs/A.md", "# A\n\n標準の本文。\n\nPJ の追記。\n");
+    write(proj, "docs/logo.svg", "<svg>project</svg>\n");
+    writeVars(proj, VARS);
+
+    const plan = await planSync3(sources(oldRoot, newRoot, ["docs/**"]), proj, VARS, {
+      conflictMarkers: true,
+    });
+    expect(plan.conflictMarkers).toBe(true);
+    expect(plan.conflicted).toEqual(["docs/logo.svg"]);
+    expect(kindOf(plan, "docs/A.md")).toBe("merge");
+
+    applySync3(plan, proj, VARS);
+    expect(readFileSync(join(proj, "docs/A.md"), "utf8")).toBe(
+      "# A\n\n標準の本文(更新)。\n\nPJ の追記。\n",
+    );
+    // マーカーを差し込めないファイルは無変更、基準タグも進めない
+    expect(readFileSync(join(proj, "docs/logo.svg"), "utf8")).toBe("<svg>project</svg>\n");
+    expect(loadVars(proj)?.standards).toBe("v0.5.1");
+  });
+
+  // 回帰: merge3 の EOL 保存を sync3 側の正規化で潰さない
+  it("preserves a CRLF project file's line endings through a merge", async () => {
+    const oldRoot = fixtureDir("gs-sync3-crlf-old");
+    const newRoot = fixtureDir("gs-sync3-crlf-new");
+    write(oldRoot, "docs/A.md", "# A\n\n標準の本文。\n");
+    write(newRoot, "docs/A.md", "# A\n\n標準の本文(更新)。\n");
+    const proj = fixtureDir("gs-sync3-crlf-proj");
+    write(proj, "docs/A.md", "# A\r\n\r\n標準の本文。\r\n\r\nPJ の追記。\r\n");
+    writeVars(proj, VARS);
+
+    const plan = await planSync3(sources(oldRoot, newRoot, ["docs/**/*.md"]), proj, VARS);
+    expect(kindOf(plan, "docs/A.md")).toBe("merge");
+    applySync3(plan, proj, VARS);
+    expect(readFileSync(join(proj, "docs/A.md"), "utf8")).toBe(
+      "# A\r\n\r\n標準の本文(更新)。\r\n\r\nPJ の追記。\r\n",
+    );
+  });
+
+  it("reports a CRLF project file as unchanged when the standards did not move", async () => {
+    const oldRoot = fixtureDir("gs-sync3-crlf2-old");
+    const newRoot = fixtureDir("gs-sync3-crlf2-new");
+    write(oldRoot, "docs/A.md", "# A\n");
+    write(newRoot, "docs/A.md", "# A\n");
+    const proj = fixtureDir("gs-sync3-crlf2-proj");
+    write(proj, "docs/A.md", "# A\r\n");
+    writeVars(proj, VARS);
+
+    const plan = await planSync3(sources(oldRoot, newRoot, ["docs/**/*.md"]), proj, VARS);
+    expect(kindOf(plan, "docs/A.md")).toBe("unchanged");
   });
 
   it("treats an identical pre-existing file as unchanged rather than a conflict", async () => {

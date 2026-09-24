@@ -11,7 +11,6 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { normalizeEol } from "./checks.js";
 import { createGlobScope, globFiles, type GlobScope } from "./glob.js";
 import { detectEol, merge3, type ConflictRegion } from "./merge3.js";
 import { STAMP_RE, normalizeMaster, stampFor } from "./normalize.js";
@@ -45,6 +44,12 @@ export interface Sync3Plan {
   /** 適用後に vars.standards / スタンプを進める先 */
   nextTag: string;
   baseTag: string;
+  /**
+   * 計画時に --conflict-markers が指定されていたか。
+   * content の有無から推測すると、マーカーを作れない衝突(バイナリ等)しか無いときに
+   * 「指定したのに 1 ファイルも書かれない」事故になるため、明示的に持ち回す。
+   */
+  conflictMarkers: boolean;
 }
 
 /** drift3 ルール 1 本分の入力。CLI / resolver が組み立てる */
@@ -72,6 +77,9 @@ interface MasterText {
 
 /** 書き出しを伴う種別(= 適用対象) */
 const WRITABLE: ReadonlySet<Sync3Kind> = new Set<Sync3Kind>(["merge", "create", "conflict"]);
+
+/** 旧マスターに存在しなかったファイルの base(空の base との 3-way にする) */
+const EMPTY_MASTER: MasterText = { text: "", unresolved: [] };
 
 /** 3-way 取り込みの計画を作る。sources の root は file: 解決済みであること */
 export async function planSync3(
@@ -112,6 +120,7 @@ export async function planSync3(
     conflicted: actions.filter((a) => a.kind === "conflict").map((a) => a.file),
     baseTag: sources[0]?.baseTag ?? vars.standards,
     nextTag: sources[0]?.headTag ?? vars.standards,
+    conflictMarkers: options.conflictMarkers === true,
   };
 }
 
@@ -127,8 +136,9 @@ export function applySync3(
 ): void {
   const writable = plan.actions.filter((a) => WRITABLE.has(a.kind) && a.content !== undefined);
   if (plan.conflicted.length > 0) {
-    const withMarkers = plan.actions.some((a) => a.kind === "conflict" && a.content !== undefined);
-    if (withMarkers) for (const a of writable) writeAction(rootDir, a);
+    // markers 指定時は衝突していないファイルも書く(指定したのに全て無変更、を避ける)。
+    // ただし未解決が残る以上、基準タグとスタンプは進めない
+    if (plan.conflictMarkers) for (const a of writable) writeAction(rootDir, a);
     return;
   }
   for (const a of writable) writeAction(rootDir, a);
@@ -179,13 +189,11 @@ function planFile(
     return missing === null ? null : withNote(missing, file, markdown, head);
   }
 
-  const raw = readFileSync(localPath, "utf8");
-  const local = markdown ? normalizeEol(raw) : raw;
-  const action =
-    base === null
-      ? planUntracked(file, local, head)
-      : planThreeWay(file, local, base, head, source, markdown, options);
-  return withNote(action, file, markdown, head);
+  // EOL は正規化せずそのまま渡す。merge3 が ours の EOL を検出して復元するため、
+  // ここで LF へ潰すと CRLF の PJ で全行が差分になる
+  const local = readFileSync(localPath, "utf8");
+  const action = planThreeWay(file, local, base ?? EMPTY_MASTER, head, source, markdown, options);
+  return withNote(addUntrackedNote(action, base), file, markdown, head);
 }
 
 /** PJ に実体が無いファイル。変更も無く PJ にも無いものは計画に載せない */
@@ -208,14 +216,14 @@ function planMissingLocal(
   return base.text === head.text ? null : bare(file, "skip-deleted", head.unresolved);
 }
 
-/** 旧マスターに無く新マスターにあり、PJ にも同名がある(D7: CONFLICT) */
-function planUntracked(file: string, local: string, head: MasterText): Sync3Action {
-  if (local === head.text) return bare(file, "unchanged", head.unresolved);
+/**
+ * 旧マスターに無く新マスターにあり、PJ にも同名がある場合の補足(D7: CONFLICT)。
+ * 空の base との 3-way になるので、内容が完全一致なら unchanged、違えば conflict になる。
+ */
+function addUntrackedNote(action: Sync3Action, base: MasterText | null): Sync3Action {
+  if (base !== null || action.kind !== "conflict") return action;
   return {
-    file,
-    kind: "conflict",
-    conflicts: [{ startLine: 0, ours: local.split("\n"), base: [], theirs: head.text.split("\n") }],
-    unresolvedVars: head.unresolved,
+    ...action,
     note: "added in master while the project already has a file of the same name",
   };
 }
@@ -232,9 +240,13 @@ function planThreeWay(
   if (base.text === head.text) return bare(file, "unchanged", head.unresolved);
   if (!markdown) {
     // §3.3: 正規化しないファイルはバイト比較。標準側が動いた以上は手動対応させる
+    // (マーカーを差し込めないため、markers 指定でも content は持たせない)
     return local === head.text
       ? bare(file, "unchanged", head.unresolved)
-      : { ...bare(file, "conflict", head.unresolved), note: "binary/non-markdown master changed" };
+      : {
+          ...bare(file, "conflict", head.unresolved),
+          note: "non-markdown master changed — resolve manually",
+        };
   }
   const res = merge3(local, base.text, head.text, {
     markers: options.conflictMarkers === true,
@@ -296,9 +308,11 @@ async function scopeFor(cache: Map<string, GlobScope>, root: string): Promise<Gl
 /* ---------- 適用 ---------- */
 
 function writeAction(rootDir: string, action: Readonly<Sync3Action>): void {
+  // content 無しを空ファイルで上書きしない(呼び出し側の絞り込みが緩んでも壊れないように)
+  if (action.content === undefined) return;
   const path = join(rootDir, action.file);
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, action.content ?? "");
+  writeFileSync(path, action.content);
 }
 
 /** U3: PJ がスタンプ行を消していた場合に末尾へ追記する fallback */
