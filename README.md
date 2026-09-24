@@ -84,7 +84,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: novexar/Guardsmith@v0.5.2
+      - uses: novexar/Guardsmith@v0.6.0
 ```
 
 | Input              | Default                   | Description                                                                                                         |
@@ -103,7 +103,7 @@ A self-contained bundle (all dependencies included) is attached to every
 Node.js 20+ are required — the npm registry is never contacted:
 
 ```bash
-gh release download v0.5.2 --repo novexar/Guardsmith --pattern 'guardsmith-cli-*.tar.gz'
+gh release download v0.6.0 --repo novexar/Guardsmith --pattern 'guardsmith-cli-*.tar.gz'
 tar -xzf guardsmith-cli-*.tar.gz
 node guardsmith-cli/guard.mjs lint
 ```
@@ -119,9 +119,9 @@ A project policy is a few lines of YAML with pinned remote references:
 version: 1
 target: claude-code
 extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v0.5.2
+  - github:novexar/guardsmith//presets/baseline.yaml@v0.6.0
   # Projects with a frontend also add:
-  # - github:novexar/guardsmith//presets/frontend.yaml@v0.5.2
+  # - github:novexar/guardsmith//presets/frontend.yaml@v0.6.0
 ignore: [] # globs excluded from every scan (concatenated across extends layers)
 rules: [] # add or override rules (redefining an id overrides it)
 exemptions: [] # time-boxed waivers: reason + approved_by + expires required
@@ -223,7 +223,7 @@ audit keeps working on projects that keep `.claude/settings.json` local. Use
 
 Existing projects are tag-pinned and keep working untouched. When you are ready to adopt a
 new standards release, follow the step-by-step checklist in
-[docs/migration/v0.5.2.md](docs/migration/v0.5.2.md) — every step is optional and independent.
+[docs/migration/v0.6.0.md](docs/migration/v0.6.0.md) — every step is optional and independent.
 
 ## Acknowledgements
 

@@ -47,7 +47,7 @@ description: マスターテンプレートからコピーされた本リポジ�
       - github:novexar/guardsmith//presets/frontend.yaml@vX.Y.Z # ← FE を持つ PJ のみ追加
     ```
 
-    - リモート参照はタグ固定(`@vX.Y.Z`)必須。実例: `github:novexar/guardsmith//presets/frontend.yaml@v0.5.1`
+    - リモート参照はタグ固定(`@vX.Y.Z`)必須。実例: `github:novexar/guardsmith//presets/frontend.yaml@v0.6.0`
     - ローカル開発(guardsmith リポジトリ内や CLI 同梱プリセット)では `preset:frontend` と書ける。
     - 検査内容: `DESIGN.md` の存在(`frontend/design-md`)/ shadcn 設定 `components.json` の存在
       (`frontend/shadcn-config`)/ 競合 UI ライブラリ不在(`frontend/no-competing-ui-libs`)/

@@ -24,13 +24,13 @@ import { ASSET_ROOT } from "./paths.js";
 import { loadPolicy, toSarif } from "./resolver.js";
 import { applySync, formatPlan, planSync } from "./sync.js";
 
-const VERSION = "0.4.0";
+const VERSION = "0.5.0";
 
 /**
  * guard new が参照する標準(standards/ + baseline)のタグ。
  * npm パッケージ版(VERSION)とは独立に、標準の内容が変わったリリースでのみ上げる。
  */
-const STANDARDS_TAG = "0.5.2";
+const STANDARDS_TAG = "0.6.0";
 
 const INIT_TEMPLATE = `version: 1
 target: claude-code

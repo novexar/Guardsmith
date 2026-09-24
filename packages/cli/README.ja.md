@@ -77,9 +77,9 @@ npx @guardsmith/cli version
 version: 1
 target: claude-code
 extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v0.5.2 # tag pinning is mandatory
+  - github:novexar/guardsmith//presets/baseline.yaml@v0.6.0 # tag pinning is mandatory
   # Projects with a frontend also add:
-  # - github:novexar/guardsmith//presets/frontend.yaml@v0.5.2
+  # - github:novexar/guardsmith//presets/frontend.yaml@v0.6.0
 ignore: [] # 全走査から除外する glob(extends 間で連結される)
 rules: [] # add or override (redefining an id overrides it)
 exemptions: [] # time-boxed waivers: reason + approved_by + expires required
@@ -96,7 +96,7 @@ GitHub の外に出ることはありません。期限切れの例外(exemption
 workflow に 1 行追加:
 
 ```yaml
-- uses: novexar/Guardsmith@v0.5.2
+- uses: novexar/Guardsmith@v0.6.0
 ```
 
 違反した PR はサマリコメントと SARIF レポート付きで失敗します。閉域網などの環境では

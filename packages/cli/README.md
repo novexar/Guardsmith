@@ -78,9 +78,9 @@ is genuinely complete.
 version: 1
 target: claude-code
 extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v0.5.2 # tag pinning is mandatory
+  - github:novexar/guardsmith//presets/baseline.yaml@v0.6.0 # tag pinning is mandatory
   # Projects with a frontend also add:
-  # - github:novexar/guardsmith//presets/frontend.yaml@v0.5.2
+  # - github:novexar/guardsmith//presets/frontend.yaml@v0.6.0
 ignore: [] # globs excluded from every scan (concatenated across extends layers)
 rules: [] # add or override (redefining an id overrides it)
 exemptions: [] # time-boxed waivers: reason + approved_by + expires required
@@ -97,7 +97,7 @@ Add one line to your workflow using the
 [GuardSmith Lint Action](https://github.com/marketplace/actions/guardsmith-lint):
 
 ```yaml
-- uses: novexar/Guardsmith@v0.5.2
+- uses: novexar/Guardsmith@v0.6.0
 ```
 
 Violating PRs fail with a summary comment and a SARIF report. Air-gapped environments can

@@ -83,7 +83,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: novexar/Guardsmith@v0.5.2
+      - uses: novexar/Guardsmith@v0.6.0
 ```
 
 | input              | 既定値                    | 説明                                                                                                  |
@@ -101,7 +101,7 @@ jobs:
 添付しています。必要なのは GitHub への到達と Node.js 20+ のみで、npm レジストリには一切接続しません:
 
 ```bash
-gh release download v0.5.2 --repo novexar/Guardsmith --pattern 'guardsmith-cli-*.tar.gz'
+gh release download v0.6.0 --repo novexar/Guardsmith --pattern 'guardsmith-cli-*.tar.gz'
 tar -xzf guardsmith-cli-*.tar.gz
 node guardsmith-cli/guard.mjs lint
 ```
@@ -117,9 +117,9 @@ node guardsmith-cli/guard.mjs lint
 version: 1
 target: claude-code
 extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v0.5.2
+  - github:novexar/guardsmith//presets/baseline.yaml@v0.6.0
   # フロントエンドを持つプロジェクトはさらに:
-  # - github:novexar/guardsmith//presets/frontend.yaml@v0.5.2
+  # - github:novexar/guardsmith//presets/frontend.yaml@v0.6.0
 ignore: [] # 全走査から除外する glob(extends 間で連結される)
 rules: [] # 追加・上書き(同じ id の再定義=上書き)
 exemptions: [] # 期限付き例外(reason + approved_by + expires 必須)
@@ -216,7 +216,7 @@ exemptions: [] # 期限付き例外(reason + approved_by + expires 必須)
 ## 標準のアップグレード
 
 既存プロジェクトはタグ固定のため、何もしなくても壊れません。新しい標準リリースへ追随する
-際は [docs/migration/v0.5.2.ja.md](docs/migration/v0.5.2.ja.md) のチェックリストに従ってください
+際は [docs/migration/v0.6.0.ja.md](docs/migration/v0.6.0.ja.md) のチェックリストに従ってください
 ——各項目は任意・独立で、段階適用できます。
 
 ## 謝辞・クレジット

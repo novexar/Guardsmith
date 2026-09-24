@@ -2,6 +2,61 @@
 
 [English](CHANGELOG.md) | **日本語**
 
+## v0.6.0 (2026-09-24)
+
+「**どれだけ文脈を常駐させるか**」と「**誰が品質を確認するか**」を整理するリリース。
+`guard lint` に `import-budget` を追加し、`CLAUDE.md` 本体と `@path` インポート先を
+合わせた常駐量を測れるようにした(60 行の `CLAUDE.md` でも 5 文書をインポートしていれば
+軽量ではなく、行数だけでは見えなかった)。標準側はコードレビューを独立 QA へ移す。
+既存 PJ の追随手順は docs/migration/v0.6.0.ja.md を参照。
+
+### Added
+
+- 新 check `import-budget`: 起点ファイルと `@` インポートで到達する全ファイルの常駐合計量を
+  測る。常に `info` を 1 件出し
+  (`resident context: N files, X chars (≈Y tokens, rough estimate)` + ファイル別内訳)、
+  `max_chars` 超過時は rule の severity で報告する。
+  `with: { path, max_chars?, max_depth? }`。`max_depth` の既定は公式仕様の上限 4 hops
+- インポートの意味論は Claude Code の memory ドキュメントに準拠: `@path` はファイル中の
+  どこでも有効、相対パスはそのファイルのディレクトリ基準、コードスパン・フェンスドコード
+  ブロックは読み飛ばす。循環・未解決・深さ上限はいずれも `info`。走査ルート外を指す参照
+  (`..`・絶対パス・`~/`・バックスラッシュ・外を指すシンボリックリンク)は**読みに行かず**
+  報告のみ
+- baseline: `claude-md/thin-diff` の直後に `claude-md/import-budget`
+  (warn、`max_chars: 32000`)
+- 標準 v0.6.0: コードレビューを PM から独立 QA(`qa-engineer`)へ移し、QA がレビューと
+  受入検証の両方を持つ / エンジニアのモデル方針を刷新(BE・DB は `opus`、FE は `sonnet`、
+  QA は `opus`)/ `CLAUDE.md` の `@` インポートを常駐が必要な 1 文書のみに絞る /
+  初回セットアップを `docs/SETUP.md` へ分離 / Issue ごとの作業状態を `.guardsmith/state/` に記録
+
+### Changed
+
+- 標準: `@docs/...` は**インポート**であることを明記した。docs/ へ移して `@` 参照にしても
+  文脈量は減らない。`@` を付けるのは `docs/CODING_STANDARDS.md` のみとし、他は通常パス +
+  「読む条件」で記載する
+- 標準: 行数規則(50 / 800 / 4)を閾値ではなく**目安**に変更
+- baseline `claude-md/thin-diff`: description を「本体行数のみ。常駐量は
+  `claude-md/import-budget`」に補足
+- リモート参照タグ・生成物のスタンプを v0.6.0 に更新(baseline の drift source /
+  `guard new` の policy 生成 / docs 例示 / Action の `release-tag` 既定)
+- npm: `@guardsmith/core` / `@guardsmith/cli` 0.5.0(Action の `cli-version` 既定も 0.5.0)
+
+### Breaking
+
+- **ポリシースキーマが再び厳格になった**。`with` の未知キーとルール直下の未知キーが
+  **parse エラー**になり、該当パス付きで報告される
+  (`rules.0.with: Unrecognized key: "limt"`)。従来は黙って捨てられていた
+  (`Rule` を `discriminatedUnion(...).and(RuleBase)` で合成しており、intersection を通ると
+  ブランチ側の strict 判定が失われていたため)。typo を含むポリシーは読み込めなくなるが、
+  これが文書どおりの挙動(「未知のキーは拒否。typo はエラーになる」)
+- **baseline v0.6.0 は `@guardsmith/cli` 0.5.0 以上が必要**。`import-budget` check を含み、
+  旧 CLI は strict スキーマで未知の check として拒否する。extends タグを上げる前に CLI を
+  上げること
+- **`CLAUDE.md` 内のパッケージ名はバッククォートで囲む必要がある**。`@` はファイル中の
+  どこでも有効(日本語では文中に `@` が現れるため必須)なので、`@scope/pkg` を裸で書くと
+  Claude Code もインポートとして読みに行き、`import-budget` は `unresolved import` の info を
+  出す。公式仕様どおりバッククォートで囲むこと
+
 ## v0.5.2 (2026-09-24)
 
 `guard lint` / `guard sync` の走査対象を「**コミットされうるファイル**」に絞るリリース。

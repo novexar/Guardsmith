@@ -133,7 +133,7 @@ export function toSarif(result: LintResult, policy: PolicyDocument): string {
           driver: {
             name: "guardsmith",
             informationUri: "https://github.com/novexar/Guardsmith",
-            version: "0.4.0",
+            version: "0.5.0",
             rules: ruleIds.map((id) => {
               const rule = policy.rules.find((r) => r.id === id);
               return {
