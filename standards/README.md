@@ -25,7 +25,7 @@
 │   ├── agents/                ← エンジニア Agent 雛形(frontend/backend/db/qa)
 │   ├── skills/                ← init-project / start-task / finish-task / new-system
 │   └── templates/             ← モノレポ用システム別 CLAUDE.md 雛形
-├── docs/                      ← REQUIREMENTS / ARCHITECTURE / CODING_STANDARDS / DEVELOPMENT_WORKFLOW 雛形
+├── docs/                      ← REQUIREMENTS / ARCHITECTURE / CODING_STANDARDS / DEVELOPMENT_WORKFLOW / SETUP 雛形 + AGENTS / CI_CD / FRONTEND_STANDARDS(標準)
 └── .github/                   ← Issue(feature/bug/task)/ PR テンプレ
 ```
 
