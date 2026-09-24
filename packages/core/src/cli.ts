@@ -3,10 +3,11 @@
  * GuardSmith CLI
  *   guard init                     # guard.policy.yaml を生成(30秒体験の入口)
  *   guard lint [--root <dir>] [--policy <file>] [--format console|sarif|json] [--out <file>] [--no-cache] [--no-gitignore]
- *   guard sync [--root <dir>] [--policy <file>] [--write] [--no-cache] [--no-gitignore]   # 既定は dry-run
+ *   guard sync [--root <dir>] [--policy <file>] [--write] [--no-cache] [--no-gitignore] [--conflict-markers] [--init-vars]
+ *   guard bump <tag> [--root <dir>] [--policy <file>] [--repo <owner>/<repo>] [--no-cache] [--no-gitignore] [--conflict-markers]
  *   guard new <dir>                # standards/ 一式から新規PJ雛形を展開
  *   guard explain <rule-id>
- * exit code: 0 = pass / 1 = error検出 / 2 = 実行エラー
+ * exit code: 0 = pass / 1 = error検出(sync/bump は衝突あり)/ 2 = 実行エラー
  */
 import {
   cpSync,
@@ -19,18 +20,27 @@ import {
 } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { runBump } from "./bump.js";
+import type { Drift3Context } from "./drift3.js";
+import { runInitVars } from "./initvars.js";
 import { formatConsole, runLint } from "./lint.js";
 import { ASSET_ROOT } from "./paths.js";
-import { loadPolicy, toSarif } from "./resolver.js";
+import { buildDrift3Sources, loadPolicyWithMeta, toSarif } from "./resolver.js";
 import { applySync, formatPlan, planSync } from "./sync.js";
+import { applySync3, formatSync3Plan, planSync3 } from "./sync3.js";
+import { loadVars, resolveBaseTag, VARS_FILENAME, writeVars, type VarsDocument } from "./vars.js";
+import type { PolicyDocument } from "./schema.js";
 
-const VERSION = "0.5.0";
+const VERSION = "0.6.0";
 
 /**
  * guard new が参照する標準(standards/ + baseline)のタグ。
  * npm パッケージ版(VERSION)とは独立に、標準の内容が変わったリリースでのみ上げる。
  */
-const STANDARDS_TAG = "0.6.0";
+const STANDARDS_TAG = "0.7.0";
+
+/** 既定の標準配布元。guard bump がタグを書き換える対象 */
+const STANDARDS_REPO = "novexar/guardsmith";
 
 const INIT_TEMPLATE = `version: 1
 target: claude-code
@@ -53,6 +63,18 @@ output:
   formats: [console]
 `;
 
+/**
+ * guard new が生成する guardsmith.vars.yaml の雛形。
+ * 値は init-project が記入する(ここでは空にしておき、書き忘れを lint で拾えるようにする)。
+ */
+const NEW_VARS: VarsDocument = { version: 1, standards: `v${STANDARDS_TAG}`, vars: {} };
+
+const NEW_VARS_HEADER = [
+  "init-project が CLAUDE.md / DESIGN.md / docs / .claude/agents の {{...}} を置換した値を",
+  "ここへ記録する。この記録が無いと guard sync / guard bump の 3-way 追随ができない。",
+  "選択式トークン(例: 単一システム | モノレポ)もキーとしてそのまま記録すること。",
+];
+
 export async function main(argv: string[]): Promise<number> {
   const [cmd, ...rest] = argv;
   switch (cmd) {
@@ -62,6 +84,8 @@ export async function main(argv: string[]): Promise<number> {
       return lint(parseFlags(rest));
     case "sync":
       return sync(parseFlags(rest));
+    case "bump":
+      return bump(rest);
     case "new":
       return newProject(rest[0]);
     case "explain":
@@ -72,10 +96,11 @@ export async function main(argv: string[]): Promise<number> {
       return 0;
     default:
       console.error(
-        "usage: guard <init|lint|sync|new|explain|version>\n" +
+        "usage: guard <init|lint|sync|bump|new|explain|version>\n" +
           "  guard init\n" +
           "  guard lint [--root <dir>] [--policy <file>] [--format console|sarif|json] [--out <file>] [--no-cache] [--no-gitignore]\n" +
-          "  guard sync [--root <dir>] [--policy <file>] [--write] [--no-cache] [--no-gitignore]\n" +
+          "  guard sync [--root <dir>] [--policy <file>] [--write] [--no-cache] [--no-gitignore] [--conflict-markers] [--init-vars]\n" +
+          "  guard bump <tag> [--root <dir>] [--policy <file>] [--repo <owner>/<repo>] [--no-cache] [--no-gitignore] [--conflict-markers]\n" +
           "  guard new <dir>\n" +
           "  guard explain <rule-id>",
       );
@@ -103,6 +128,12 @@ interface Flags {
   /** .gitignore に追従しない(= 全走査に戻す) */
   noGitignore: boolean;
   write: boolean;
+  /** 衝突箇所をマーカー入りで書き出す(終了コードは 1 のまま) */
+  conflictMarkers: boolean;
+  /** guardsmith.vars.yaml を推定生成して終了する(sync は実行しない) */
+  initVars: boolean;
+  /** guard bump がタグを書き換える対象リポジトリ */
+  repo: string;
 }
 
 function parseFlags(args: string[]): Flags {
@@ -113,6 +144,9 @@ function parseFlags(args: string[]): Flags {
     noCache: false,
     noGitignore: false,
     write: false,
+    conflictMarkers: false,
+    initVars: false,
+    repo: STANDARDS_REPO,
   };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -120,9 +154,12 @@ function parseFlags(args: string[]): Flags {
     else if (a === "--policy") f.policy = args[++i];
     else if (a === "--format") f.format = args[++i] as Flags["format"];
     else if (a === "--out") f.out = args[++i];
+    else if (a === "--repo") f.repo = args[++i];
     else if (a === "--no-cache") f.noCache = true;
     else if (a === "--no-gitignore") f.noGitignore = true;
     else if (a === "--write") f.write = true;
+    else if (a === "--conflict-markers") f.conflictMarkers = true;
+    else if (a === "--init-vars") f.initVars = true;
     else throw new Error(`unknown flag: ${a}`);
   }
   if (!["console", "sarif", "json"].includes(f.format))
@@ -136,9 +173,11 @@ async function lint(f: Flags): Promise<number> {
     console.error(`policy not found: ${policyPath} — run 'guard init' first`);
     return 2;
   }
-  const policy = await loadPolicy(policyPath, { noCache: f.noCache });
-  const result = await runLint(policy, resolve(f.root), new Date(), {
+  const root = resolve(f.root);
+  const { policy, driftOrigins } = await loadPolicyWithMeta(policyPath, { noCache: f.noCache });
+  const result = await runLint(policy, root, new Date(), {
     gitignore: !f.noGitignore,
+    drift3: await drift3Context(policy, driftOrigins, root, f),
   });
 
   const output =
@@ -158,17 +197,116 @@ async function lint(f: Flags): Promise<number> {
   return result.ok ? 0 : 1;
 }
 
+/**
+ * 3-way 検査の文脈を組み立てる。
+ * vars が無い / マスターを引けない場合は null / 空を返し、checkDrift3 に退避させる
+ * (lint 全体を落とさない — 標準の取得失敗で検査全部が止まるのは害が大きい)。
+ */
+async function drift3Context(
+  policy: PolicyDocument,
+  driftOrigins: ReadonlyMap<string, string>,
+  root: string,
+  f: Flags,
+): Promise<Drift3Context | undefined> {
+  if (!policy.rules.some((r) => r.check === "drift3")) return undefined;
+  const base = resolveBaseTag(root);
+  const vars = loadVars(root);
+  if (base === null || vars === null) return { sources: new Map(), vars: null };
+  warnStampMismatch(base.stampTag, base.tag);
+  try {
+    const sources = await buildDrift3Sources(policy, driftOrigins, base.tag, {
+      noCache: f.noCache,
+    });
+    return { sources: new Map(sources.map((s) => [s.ruleId, s])), vars };
+  } catch (e) {
+    console.error(`warning: could not resolve the standards master: ${(e as Error).message}`);
+    return { sources: new Map(), vars };
+  }
+}
+
+function warnStampMismatch(stampTag: string | undefined, tag: string): void {
+  if (stampTag === undefined) return;
+  console.error(
+    `warning: CLAUDE.md is stamped ${stampTag} but ${VARS_FILENAME} says ${tag} — ` +
+      `using ${tag} (fix \`standards:\` if the stamp is the correct one)`,
+  );
+}
+
 async function sync(f: Flags): Promise<number> {
+  const root = resolve(f.root);
   const policyPath = resolve(f.root, f.policy);
   if (!existsSync(policyPath)) {
     console.error(`policy not found: ${policyPath} — run 'guard init' first`);
     return 2;
   }
-  const policy = await loadPolicy(policyPath, { noCache: f.noCache });
-  const plan = await planSync(policy, resolve(f.root), { gitignore: !f.noGitignore });
-  if (f.write) applySync(plan, resolve(f.root));
-  console.log(formatPlan(plan, f.write));
-  return 0;
+  if (f.initVars) {
+    return runInitVars({
+      rootDir: root,
+      policyFile: policyPath,
+      noCache: f.noCache,
+      gitignore: !f.noGitignore,
+    });
+  }
+  const { policy, driftOrigins } = await loadPolicyWithMeta(policyPath, { noCache: f.noCache });
+
+  // 節単位モード(check: drift)は drift3 の有無に関わらず従来どおり動く。両方のルールを
+  // 持つ policy(baseline v0.7.0 の skills + standards)では両方走る。
+  // drift3 だけの policy では節単位の空サマリを出さない(それ以外は従来どおりの出力)。
+  const threeWay = policy.rules.some((r) => r.check === "drift3");
+  if (!threeWay || policy.rules.some((r) => r.check === "drift")) {
+    const plan = await planSync(policy, root, { gitignore: !f.noGitignore });
+    if (f.write) applySync(plan, root);
+    console.log(formatPlan(plan, f.write));
+  }
+
+  if (!threeWay) return 0;
+  return syncThreeWay(policy, driftOrigins, root, f);
+}
+
+async function syncThreeWay(
+  policy: PolicyDocument,
+  driftOrigins: ReadonlyMap<string, string>,
+  root: string,
+  f: Flags,
+): Promise<number> {
+  const base = resolveBaseTag(root);
+  const vars = loadVars(root);
+  if (base === null || vars === null) {
+    console.error(
+      `${VARS_FILENAME} not found — the 3-way standards sync needs the values the project ` +
+        "was generated with. run: guard sync --init-vars",
+    );
+    return 2;
+  }
+  warnStampMismatch(base.stampTag, base.tag);
+  const sources = await buildDrift3Sources(policy, driftOrigins, base.tag, {
+    noCache: f.noCache,
+  });
+  const plan = await planSync3(sources, root, vars, {
+    gitignore: !f.noGitignore,
+    conflictMarkers: f.conflictMarkers,
+  });
+  if (f.write) applySync3(plan, root, vars);
+  console.log(formatSync3Plan(plan, f.write));
+  return plan.conflicted.length > 0 ? 1 : 0;
+}
+
+async function bump(args: string[]): Promise<number> {
+  const [tag, ...rest] = args;
+  if (!tag || tag.startsWith("-")) {
+    console.error("usage: guard bump <tag> [--repo <owner>/<repo>]");
+    return 2;
+  }
+  const f = parseFlags(rest);
+  return runBump({
+    tag,
+    rootDir: resolve(f.root),
+    policyFile: resolve(f.root, f.policy),
+    repo: f.repo,
+    noCache: f.noCache,
+    gitignore: !f.noGitignore,
+    conflictMarkers: f.conflictMarkers,
+  });
 }
 
 function newProject(dir?: string): number {
@@ -199,11 +337,13 @@ function newProject(dir?: string): number {
     writeFileSync(claudeMd, updated);
   }
   writeFileSync(join(dest, "guard.policy.yaml"), NEW_POLICY_TEMPLATE);
+  writeVars(dest, NEW_VARS, { header: NEW_VARS_HEADER });
 
   console.log(
     `expanded standards into ${dest}\n` +
       "next steps:\n" +
       "  1. run the init-project skill in Claude Code to concretize CLAUDE.md / agents / docs\n" +
+      `     (it records every replacement value in ${VARS_FILENAME})\n` +
       "  2. guard lint  (errors are expected until init-project is completed)",
   );
   return 0;
@@ -231,7 +371,7 @@ async function explain(ruleId?: string): Promise<number> {
   }
   // v0.1: ローカルポリシーのdescriptionを表示。docs連携はv0.2
   try {
-    const policy = await loadPolicy(resolve("guard.policy.yaml"));
+    const { policy } = await loadPolicyWithMeta(resolve("guard.policy.yaml"));
     const rule = policy.rules.find((r) => r.id === ruleId);
     if (!rule) {
       console.error(`rule not found in effective policy: ${ruleId}`);
