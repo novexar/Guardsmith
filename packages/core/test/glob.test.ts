@@ -2,9 +2,10 @@
  * glob ヘルパー検証 — .gitignore 意味論(正確性)と fast-glob ignore(枝刈り)の両立。
  * 「git が追跡するファイルを誤って除外しない」を最優先に、枝刈りは安全な行からのみ行う。
  */
-import { rmSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { ALWAYS_IGNORED, createGlobScope, globFiles } from "../src/glob.js";
+import { ALWAYS_IGNORED, createGlobScope, createIgnoreMatcher, globFiles } from "../src/glob.js";
 import { makeFixtureDir, write } from "./helpers.js";
 
 const dirs: string[] = [];
@@ -190,6 +191,21 @@ describe("createGlobScope — pruning (traversal, not just filtering)", () => {
     expect(hits).toContain("CLAUDE.md");
   });
 
+  it("does not prune a directory-only line that a descendant .gitignore re-includes", async () => {
+    // reviewer の再現入力: 末尾 `/` 付きのディレクトリ限定形
+    const root = fixture({
+      ".gitignore": "build/\n",
+      "sub/.gitignore": "!build/\n",
+      "build/ignored.txt": "x",
+      "sub/build/x.txt": "x",
+    });
+    const scope = await createGlobScope(root);
+    expect(scope.fgIgnore.some((p) => p.includes("build"))).toBe(false);
+    const hits = (await globFiles(scope, ["**"])).sort();
+    expect(hits).toContain("sub/build/x.txt");
+    expect(hits).not.toContain("build/ignored.txt");
+  });
+
   it("does not prune a directory that a descendant .gitignore re-includes", async () => {
     // ルート `build` を `sub/.gitignore` の `!build` が再包含する。
     // 親ディレクトリ(sub)は除外されていないため git は sub/build 配下を追跡する
@@ -224,5 +240,36 @@ describe("createGlobScope — pruning (traversal, not just filtering)", () => {
     const root = fixture({ ".gitignore": "a{b,c}.txt\n", "a{b,c}.txt": "x", "keep.txt": "x" });
     const scope = await createGlobScope(root);
     expect(scope.fgIgnore.some((p) => p.includes("{"))).toBe(false);
+  });
+});
+
+describe("createIgnoreMatcher — precedence does not depend on enumeration order", () => {
+  const ROOT = { base: "", lines: ["*.log"] };
+  const SUB = { base: "sub", lines: ["!keep.log"] };
+  const DEEP = { base: "sub/deep", lines: ["keep.log"] };
+
+  it("lets the deeper .gitignore win regardless of input order", () => {
+    // fast-glob の列挙順は保証されないため、どの順で渡しても結果が変わってはならない
+    for (const files of [
+      [ROOT, SUB, DEEP],
+      [DEEP, SUB, ROOT],
+      [SUB, DEEP, ROOT],
+    ]) {
+      const isIgnored = createIgnoreMatcher(files);
+      expect(isIgnored("a.log")).toBe(true); // ルールはルートの *.log のみ
+      expect(isIgnored("sub/keep.log")).toBe(false); // sub の否定が勝つ
+      expect(isIgnored("sub/deep/keep.log")).toBe(true); // さらに深い再除外が勝つ
+    }
+  });
+});
+
+describe("createGlobScope — .gitignore read failures", () => {
+  it("fails loudly with the offending path when a .gitignore cannot be read", async () => {
+    const root = makeFixtureDir("gs-glob-bad");
+    dirs.push(root);
+    write(root, "CLAUDE.md", "x");
+    mkdirSync(join(root, ".gitignore")); // .gitignore がディレクトリ(読み取り不能)
+    // 黙って「除外なし」に倒れると走査範囲が静かに変わるため、原因パス付きで失敗させる
+    await expect(createGlobScope(root)).rejects.toThrow(/failed to read \.gitignore:/);
   });
 });

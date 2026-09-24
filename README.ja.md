@@ -139,14 +139,32 @@ exemptions: [] # 期限付き例外(reason + approved_by + expires 必須)
 
 各 check は「**コミットされうるファイル**」を対象にします:
 
-- 既定で `.gitignore`(入れ子の `.gitignore` も)に追従し、`.git/` は常に除外します。
-  したがって `secret-scan` は `.claude/settings.local.json` の中身を報告せず、
-  `file-exists` は `.gitignore` 対象のパスを「存在しない」と扱います(リポジトリに入らないため)
+- 既定で `.gitignore`(入れ子の `.gitignore` も)に追従し、`.git/` は常に除外します
 - さらにポリシーのトップレベル `ignore`(glob)を除外します。`rules` と違い extends 間で
   **連結**されるため、組織 overlay 側の除外が各 PJ に届きます
 - 除外対象は**走査の時点で枝刈り**します(結果フィルタではありません)。エージェント worktree や
   `node_modules`、virtualenv を抱えるリポジトリでも実行時間が伸びません
 - `--no-gitignore` で全走査に戻せます(除外されたファイルの中身を点検したいとき)
+
+8 種の check のうち 7 種は glob でファイルを列挙するため `.gitignore` に追従します。
+`json-path` だけは単一の固定パスを直接読むため非追従です:
+
+| check           | `.gitignore` 追従 | `.gitignore` 対象パスの扱い                                                                                               |
+| --------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `file-exists`   | する              | **存在しない**扱い → ルールが違反を報告(リポジトリに入らないため)                                                         |
+| `file-absent`   | する              | **無い**扱い → ディスク上にあっても無検出                                                                                 |
+| `content-match` | する              | 走査対象外(対象0件は `info` として表示)                                                                                   |
+| `max-lines`     | する              | 走査対象外                                                                                                                |
+| `frontmatter`   | する              | 走査対象外                                                                                                                |
+| `drift`         | する              | マスターとの比較対象外                                                                                                    |
+| `secret-scan`   | する              | 走査対象外 — `.claude/settings.local.json` 等から検出されない                                                             |
+| `json-path`     | **しない**        | 直読みのため従来どおり発火(`.claude/settings.json` を gitignore している PJ でも `security/dangerous-permissions` は効く) |
+
+驚きやすいのは 2 つです。`.env` を `.gitignore` に入れている PJ では `file-absent` の
+`hygiene/no-env-file` が無検出になります — このルールは「`.env` をコミットさせない」ためのもので、
+`.gitignore` 対象ならコミットされ得ないため妥当な結果です。`json-path` を非追従にしているのは、
+`.claude/settings.json` をローカル管理している PJ でも設定監査を効かせ続けるためです。
+すべての check に除外ファイルも見せたい場合は `--no-gitignore` を使ってください。
 
 ## コマンド一覧
 

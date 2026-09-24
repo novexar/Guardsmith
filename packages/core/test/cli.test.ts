@@ -1,7 +1,7 @@
 /** CLI (guard init / lint / explain) の挙動検証 */
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { main } from "../src/cli.js";
 import { makeFixtureDir, write } from "./helpers.js";
 
@@ -86,5 +86,24 @@ describe("guard explain", () => {
 describe("usage", () => {
   it("prints usage for unknown command", async () => {
     expect(await main(["wat"])).toBe(2);
+  });
+
+  it("documents every lint / sync flag it accepts", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      expect(await main(["wat"])).toBe(2);
+      const lines = spy.mock.calls.flatMap((c) => String(c[0]).split("\n"));
+      const lint = lines.find((l) => l.includes("guard lint"));
+      const sync = lines.find((l) => l.includes("guard sync"));
+      for (const line of [lint, sync]) {
+        expect(line).toBeDefined();
+        expect(line).toContain("--no-cache");
+        expect(line).toContain("--no-gitignore");
+      }
+      expect(lint).toContain("--format");
+      expect(sync).toContain("--write");
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

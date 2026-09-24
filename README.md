@@ -142,15 +142,33 @@ exemptions: [] # time-boxed waivers: reason + approved_by + expires required
 Checks operate on **files that could be committed**:
 
 - `.gitignore` is honoured by default, nested `.gitignore` files included, and `.git/` is
-  always excluded. So `secret-scan` never reports a value inside
-  `.claude/settings.local.json`, and `file-exists` treats a `.gitignore`'d path as missing —
-  it will never reach the repository
+  always excluded
 - The policy's top-level `ignore` globs are excluded on top of that. Unlike `rules`, they
   are **concatenated** across `extends` layers, so an organization overlay's exclusions
   reach every project
 - Excluded trees are **pruned during traversal**, not filtered afterwards — repositories
   carrying agent worktrees, `node_modules` or virtualenvs stay fast
 - `--no-gitignore` restores the full scan, to audit what is sitting in ignored files
+
+Seven of the eight checks enumerate files with globs and therefore follow `.gitignore`.
+`json-path` reads one fixed path directly and is the only exception:
+
+| Check           | Follows `.gitignore` | What it means for a `.gitignore`'d path                                                                              |
+| --------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `file-exists`   | yes                  | Counts as **missing** → the rule reports it (it never reaches the repo)                                              |
+| `file-absent`   | yes                  | Counts as **absent** → no finding, even if the file is on disk                                                       |
+| `content-match` | yes                  | Not scanned (an empty match set is reported as `info`)                                                               |
+| `max-lines`     | yes                  | Not scanned                                                                                                          |
+| `frontmatter`   | yes                  | Not scanned                                                                                                          |
+| `drift`         | yes                  | Not compared against the master                                                                                      |
+| `secret-scan`   | yes                  | Not scanned — no finding from `.claude/settings.local.json` and friends                                              |
+| `json-path`     | **no**               | Read directly, so it still fires (e.g. `security/dangerous-permissions` on a `.gitignore`'d `.claude/settings.json`) |
+
+The two surprising ones are worth spelling out. `file-absent` on `.env` finds nothing once
+`.env` is in `.gitignore` — correct, because the rule exists to stop `.env` being committed,
+and an ignored file cannot be. And `json-path` is deliberately exempt so that a settings
+audit keeps working on projects that keep `.claude/settings.json` local. Use
+`--no-gitignore` when you want every check to look at ignored files too.
 
 ## Commands
 

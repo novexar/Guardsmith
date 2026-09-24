@@ -118,6 +118,47 @@ describe("guard lint × .gitignore", () => {
     }
   });
 
+  it("documents the file-absent / json-path semantics", async () => {
+    // README / migration の表と実挙動を一致させるための回帰テスト
+    const R2 = makeFixtureDir("gs-ignore-checks");
+    try {
+      write(R2, ".gitignore", ".env\n.claude/settings.json\n");
+      write(R2, ".env", "SECRET=1\n");
+      write(R2, ".claude/settings.json", `{"permissions":{"allow":["rm -rf /"]}}`);
+
+      const p = policy({
+        rules: [
+          {
+            id: "hygiene/no-env-file",
+            severity: "error",
+            check: "file-absent",
+            with: { paths: [".env"] },
+          },
+          {
+            id: "security/dangerous-permissions",
+            severity: "error",
+            check: "json-path",
+            with: {
+              path: ".claude/settings.json",
+              assert: [{ query: "$.permissions.allow[*]", op: "not-matches", value: "rm -rf" }],
+            },
+          },
+        ],
+      } as Partial<PolicyDocument>);
+      const found = ids((await runLint(p, R2)).findings);
+      // file-absent は glob 列挙なので追従 → .gitignore 対象は「無い」扱い
+      expect(found).not.toContain("hygiene/no-env-file");
+      // json-path は単一パスの直読みなので非追従 → 従来どおり発火
+      expect(found).toContain("security/dangerous-permissions");
+
+      // --no-gitignore では file-absent も検出する
+      const full = ids((await runLint(p, R2, new Date(), { gitignore: false })).findings);
+      expect(full).toContain("hygiene/no-env-file");
+    } finally {
+      rmSync(R2, { recursive: true, force: true });
+    }
+  });
+
   it("treats a .gitignore'd path as non-existent for file-exists", async () => {
     const p = policy({
       rules: [

@@ -24,8 +24,9 @@ function gitAvailable(): boolean {
 
 const GITIGNORES: Record<string, string> = {
   // ディレクトリ限定 / 非アンカー / アンカー / エスケープ / ディレクトリ再包含
-  ".gitignore": "node_modules/\n*.log\n/root-only.txt\nbuild\n\\#hash.txt\nout/\n# comment\n",
-  "sub/.gitignore": "!build\n!important.log\n",
+  ".gitignore":
+    "node_modules/\n*.log\n/root-only.txt\nbuild\n\\#hash.txt\nout/\ndirbuild/\n# comment\n",
+  "sub/.gitignore": "!build\n!important.log\n!dirbuild/\n",
   "deep/.gitignore": "!out/keep\n",
 };
 
@@ -42,6 +43,8 @@ const FILES = [
   "node_modules/pkg/index.js",
   "deep/out/keep",
   "out/z.txt",
+  "dirbuild/a.txt",
+  "sub/dirbuild/x.txt",
 ];
 
 const available = gitAvailable();
@@ -99,6 +102,9 @@ describe.skipIf(!available)("globFiles matches git", () => {
     const ours = await globFiles(scope, ["**/*"]);
     // 深い階層の否定がディレクトリごと再包含するケース(過剰除外の回帰防止)
     expect(ours).toContain("sub/build/secret.md");
+    // ディレクトリ限定形(`build/` + `!build/`)も同様に保持されること
+    expect(ours).toContain("sub/dirbuild/x.txt");
+    expect(ours).not.toContain("dirbuild/a.txt");
     expect(ours).toContain("sub/important.log");
     // 除外されたディレクトリの内側は再包含できない(git の規則)
     expect(ours).not.toContain("deep/out/keep");

@@ -63,7 +63,7 @@ export interface GlobScope {
 }
 
 /** .gitignore 1ファイル分。base は root 相対の posix ディレクトリ(ルートは "") */
-interface GitignoreFile {
+export interface GitignoreFile {
   readonly base: string;
   readonly lines: readonly string[];
 }
@@ -78,19 +78,42 @@ export async function createGlobScope(root: string, options: GlobOptions = {}): 
     return { root, fgIgnore: base, isIgnored: () => false };
   }
 
-  const files = await collectGitignoreFiles(root, base);
+  const rootLines = readGitignore(join(root, ".gitignore"));
+  const rootFile: GitignoreFile[] = rootLines.length > 0 ? [{ base: "", lines: rootLines }] : [];
+  // 探索時点ではネストした否定行をまだ知らないため、ルート由来の枝刈りだけで .gitignore を探す
+  // (git も除外済みディレクトリには降りず、その配下の .gitignore を読まない)
+  const discoveryIgnore = [...base, ...derivePrunePatterns(rootFile)];
+  const files = [...rootFile, ...(await collectNestedGitignoreFiles(root, discoveryIgnore))];
   if (files.length === 0) {
     return { root, fgIgnore: base, isIgnored: () => false };
   }
 
-  const matcher = ignoreFactory().add(
-    files.flatMap((f) => f.lines.map((line) => rebaseLine(line, f.base))),
-  );
+  // 最終的な枝刈りは全 .gitignore の否定行を踏まえて作り直す(ルート行の採否が変わりうる)
   return {
     root,
     fgIgnore: [...base, ...derivePrunePatterns(files)],
-    isIgnored: (relPath) => relPath.length > 0 && matcher.ignores(relPath),
+    isIgnored: createIgnoreMatcher(files),
   };
+}
+
+/**
+ * .gitignore 群から除外判定関数を作る(root 相対の posix パスを受け取り、true = 除外)。
+ * ignore パッケージは後から add した行が優先される(= git の「後勝ち」)。深い .gitignore ほど
+ * 優先度が高いため、深さの昇順に安定ソートしてから add する。
+ * fast-glob の列挙順は保証されないので、この正規化が無いと深い `!keep.log` が
+ * 浅い `*.log` に負けることがある。
+ */
+export function createIgnoreMatcher(files: readonly GitignoreFile[]): (relPath: string) => boolean {
+  const ordered = [...files].sort((a, b) => baseDepth(a.base) - baseDepth(b.base));
+  const matcher = ignoreFactory().add(
+    ordered.flatMap((f) => f.lines.map((line) => rebaseLine(line, f.base))),
+  );
+  return (relPath) => relPath.length > 0 && matcher.ignores(relPath);
+}
+
+/** base のセグメント数(ルートは 0) */
+function baseDepth(base: string): number {
+  return base === "" ? 0 : base.split("/").length;
 }
 
 /** スコープに従ってファイルを列挙する(root 相対の posix パス) */
@@ -110,21 +133,18 @@ export async function globFiles(
 
 /* ---------- .gitignore の収集 ---------- */
 
-async function collectGitignoreFiles(
+/** ルート以外の .gitignore を集める(ルート分は呼び出し側が読み込み済み) */
+async function collectNestedGitignoreFiles(
   root: string,
-  baseIgnore: readonly string[],
+  discoveryIgnore: readonly string[],
 ): Promise<GitignoreFile[]> {
-  const files: GitignoreFile[] = [];
-  const rootLines = readGitignore(join(root, ".gitignore"));
-  if (rootLines.length > 0) files.push({ base: "", lines: rootLines });
-
-  // ネストした .gitignore の探索も、ルート .gitignore 由来のパターンで枝刈りする
   const found = await fg("**/.gitignore", {
     cwd: root,
     dot: true,
     onlyFiles: true,
-    ignore: [...baseIgnore, ...derivePrunePatterns(files)],
+    ignore: [...discoveryIgnore],
   });
+  const files: GitignoreFile[] = [];
   for (const rel of found) {
     const idx = rel.lastIndexOf("/");
     if (idx < 0) continue; // ルートの .gitignore は読み込み済み
@@ -134,10 +154,20 @@ async function collectGitignoreFiles(
   return files;
 }
 
-/** .gitignore を行配列にする(空行・コメント・末尾空白を除去)。存在しなければ空配列 */
+/**
+ * .gitignore を行配列にする(空行・コメント・末尾空白を除去)。存在しなければ空配列。
+ * 読めた/読めないを取り違えると走査範囲が静かに変わるため、読取失敗は原因パスを添えて投げる
+ * (黙って空扱いにはしない)。
+ */
 function readGitignore(path: string): string[] {
   if (!existsSync(path)) return [];
-  return readFileSync(path, "utf8")
+  let text: string;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch (e) {
+    throw new Error(`failed to read .gitignore: ${path}: ${(e as Error).message}`);
+  }
+  return text
     .split(/\r?\n/)
     .map((line) => line.replace(/\s+$/, ""))
     .filter((line) => line.length > 0 && !line.startsWith("#"));

@@ -74,8 +74,8 @@ export async function main(argv: string[]): Promise<number> {
       console.error(
         "usage: guard <init|lint|sync|new|explain|version>\n" +
           "  guard init\n" +
-          "  guard lint [--root <dir>] [--policy <file>] [--format console|sarif|json] [--out <file>] [--no-cache]\n" +
-          "  guard sync [--root <dir>] [--policy <file>] [--write] [--no-cache]\n" +
+          "  guard lint [--root <dir>] [--policy <file>] [--format console|sarif|json] [--out <file>] [--no-cache] [--no-gitignore]\n" +
+          "  guard sync [--root <dir>] [--policy <file>] [--write] [--no-cache] [--no-gitignore]\n" +
           "  guard new <dir>\n" +
           "  guard explain <rule-id>",
       );
