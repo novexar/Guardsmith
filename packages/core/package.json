@@ -30,6 +30,7 @@
     "ignore": "^7.0.6",
     "jsonpath-plus": "^10.4.0",
     "micromatch": "^4.0.8",
+    "node-diff3": "^3.2.1",
     "tar": "^7.5.22",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"

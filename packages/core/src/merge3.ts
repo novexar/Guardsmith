@@ -1,0 +1,110 @@
+/**
+ * 3-way マージ — node-diff3 の唯一のラッパー。
+ *
+ * node-diff3 は文字列を渡すと `stringSeparator` の既定 `/\s+/` で **単語単位** に
+ * マージする。行の途中で他方の変更が差し込まれた壊れたファイルが静かに書き出されるため、
+ * ここでは必ず `string[]`(行配列)で呼ぶ。この制約をモジュール内に封じ込めるため、
+ * `node-diff3` の直接 import は ESLint の no-restricted-imports で本ファイル以外禁止。
+ *
+ * また node-diff3 は EOL を一切正規化しない。ours の EOL を検出し、LF で計算して
+ * 元の EOL で join し直す(マーカー行だけ LF になるのを防ぐ)。
+ */
+import { diff3Merge, mergeDiff3, type MergeRegion } from "node-diff3";
+
+export type Eol = "\n" | "\r\n";
+
+export interface ConflictRegion {
+  /** ours 側の 0 起点開始行 */
+  startLine: number;
+  ours: string[];
+  base: string[];
+  theirs: string[];
+}
+
+export interface Merge3Labels {
+  ours: string;
+  base: string;
+  theirs: string;
+}
+
+export interface Merge3Options {
+  /** 衝突箇所をマーカー付きで出力するか(既定 false = merged を返さない) */
+  markers?: boolean;
+  labels?: Readonly<Merge3Labels>;
+}
+
+export interface Merge3Result {
+  /** markers:false かつ衝突ありのときは undefined(呼び出し側が無変更を選べる) */
+  merged?: string;
+  conflicts: ConflictRegion[];
+  /** 入力 ours から検出した EOL。出力の join に使う */
+  eol: Eol;
+  /** merged が ours と異なるか(merged が無いときは false) */
+  changed: boolean;
+}
+
+/** ours / base / theirs の 3-way マージ。行単位で計算する */
+export function merge3(
+  ours: string,
+  base: string,
+  theirs: string,
+  opts: Readonly<Merge3Options> = {},
+): Merge3Result {
+  const eol = detectEol(ours);
+  const oursLines = toLines(ours);
+  const baseLines = toLines(base);
+  const theirsLines = toLines(theirs);
+
+  const regions = diff3Merge<string>(oursLines, baseLines, theirsLines, {
+    excludeFalseConflicts: true,
+  });
+  const conflicts = collectConflicts(regions);
+
+  if (conflicts.length > 0 && opts.markers !== true) {
+    return { conflicts, eol, changed: false };
+  }
+
+  const lines =
+    conflicts.length === 0
+      ? regions.flatMap((r) => r.ok ?? [])
+      : mergeDiff3<string>(oursLines, baseLines, theirsLines, {
+          excludeFalseConflicts: true,
+          label: toDiff3Label(opts.labels),
+        }).result.map(String);
+
+  const merged = lines.join(eol);
+  return { merged, conflicts, eol, changed: merged !== ours };
+}
+
+/** `MergeRegion` は判別可能 union ではないため ok / conflict の順で絞る */
+function collectConflicts(regions: readonly MergeRegion<string>[]): ConflictRegion[] {
+  const conflicts: ConflictRegion[] = [];
+  for (const r of regions) {
+    if (r.ok) continue;
+    if (!r.conflict) continue;
+    conflicts.push({
+      startLine: r.conflict.aIndex,
+      ours: [...r.conflict.a],
+      base: [...r.conflict.o],
+      theirs: [...r.conflict.b],
+    });
+  }
+  return conflicts;
+}
+
+function toDiff3Label(labels: Readonly<Merge3Labels> | undefined) {
+  return labels === undefined ? {} : { a: labels.ours, o: labels.base, b: labels.theirs };
+}
+
+/** ours に CRLF が 1 つでもあれば CRLF ファイルとみなす */
+export function detectEol(text: string): Eol {
+  return text.includes("\r\n") ? "\r\n" : "\n";
+}
+
+/**
+ * LF 正規化して行配列にする。末尾改行は最後の空要素として表現されるため、
+ * `join(eol)` で往復すると末尾改行の有無がそのまま保存される。
+ */
+export function toLines(text: string): string[] {
+  return text.replaceAll("\r\n", "\n").split("\n");
+}
