@@ -79,7 +79,7 @@ export async function loadPolicyWithMeta(
 async function resolveDoc(
   doc: PolicyDocument,
   baseDir: string,
-  opts: RemoteOptions,
+  opts: PolicyLoadOptions,
   seen: Set<string>,
 ): Promise<PolicyDocument> {
   const merged = new Map<string, Rule>();
@@ -115,7 +115,7 @@ interface LoadedRef {
   key: string;
 }
 
-async function loadRef(ref: string, baseDir: string, opts: RemoteOptions): Promise<LoadedRef> {
+async function loadRef(ref: string, baseDir: string, opts: PolicyLoadOptions): Promise<LoadedRef> {
   if (ref.startsWith("preset:")) {
     const name = ref.slice("preset:".length);
     const candidates = [
@@ -131,7 +131,13 @@ async function loadRef(ref: string, baseDir: string, opts: RemoteOptions): Promi
     return { doc: parseFile(found), baseDir: dirname(found), key: `file:${found}` };
   }
   if (ref.startsWith("github:")) {
-    const gh = parseGithubRef(ref);
+    const parsed = parseGithubRef(ref);
+    // `guard bump <tag>` は **extends も新タグで解決**する。ここを旧タグのままにすると、
+    // 新タグの baseline で paths が広がった場合にその bump では新規対象を取りこぼす
+    const override = targetsRepo(ref, opts.repo ?? DEFAULT_STANDARDS_REPO)
+      ? opts.headTag
+      : undefined;
+    const gh = { ...parsed, tag: override ?? parsed.tag };
     const repoDir = await ensureRepoCached(gh, opts);
     const file = containedJoin(repoDir, gh.path ?? "guard.policy.yaml");
     if (!existsSync(file)) {

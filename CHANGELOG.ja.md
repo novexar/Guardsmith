@@ -46,6 +46,14 @@ run: guard bump v0.7.0`)。手作業が要るものは `info`。`guardsmith.vars
 
 ### Changed
 
+- 標準が黙って巻き戻ることはない。`guardsmith.vars.yaml` の基準タグが policy の配布タグより
+  **新しい**場合(bump の policy 書き込みだけが失敗した、policy を revert・手編集した、など)、
+  素直に 3-way を組むと「新 → 旧」の向きになり標準を取り消してしまう。`guard sync` と
+  `guard bump` は計画を出さずに終了コード 2 で拒否し、`guard lint` は `warn` で報告する。
+  意図した巻き戻しには `--allow-downgrade` の明示が必要
+- `guard bump <tag>` は対象リポジトリの **`extends` 参照**も新タグで解決する。新タグの
+  baseline でルールの `paths` が広がっていた場合、その bump で新規対象を取り込める
+  (従来は次回実行まで漏れていた)
 - 追随するのは `--repo`(既定 `novexar/guardsmith`)が指す標準リポジトリのみ。
   `guardsmith.vars.yaml` が持つ `standards` タグは 1 本なので、別リポジトリを指す `drift3`
   (Layer2 のオーバーレイ `github:novexar/guardsmith-private//standards@v3.0.0` など)は

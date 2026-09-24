@@ -128,8 +128,14 @@ guard bump v0.7.0   # 取り込み。policy の extends タグと vars の stand
 
 | コマンド | フラグ | 終了コード |
 |---|---|---|
-| `guard sync` | `--root <dir>` / `--policy <file>` / `--write` / `--no-cache` / `--no-gitignore` / `--conflict-markers` / `--init-vars` | 0 = 衝突なし(dry-run 含む)/ 1 = 衝突あり / 2 = 実行エラー・`--write` で vars 未完成 |
-| `guard bump <tag>` | `--root <dir>` / `--policy <file>` / `--repo <owner>/<repo>` / `--no-cache` / `--no-gitignore` / `--conflict-markers` | 0 = 適用完了 / 1 = 衝突あり(policy も vars も未変更)/ 2 = 実行エラー・vars 未完成 |
+| `guard sync` | `--root <dir>` / `--policy <file>` / `--write` / `--no-cache` / `--no-gitignore` / `--conflict-markers` / `--init-vars` / `--allow-downgrade` | 0 = 衝突なし(dry-run 含む)/ 1 = 衝突あり / 2 = 実行エラー・`--write` で vars 未完成・巻き戻し |
+| `guard bump <tag>` | `--root <dir>` / `--policy <file>` / `--repo <owner>/<repo>` / `--no-cache` / `--no-gitignore` / `--conflict-markers` / `--allow-downgrade` | 0 = 適用完了 / 1 = 衝突あり(policy も vars も未変更)/ 2 = 実行エラー・vars 未完成・巻き戻し |
+
+`guardsmith.vars.yaml` の基準タグが policy の配布タグより**新しい**場合(bump の policy 書き込み
+だけが失敗した、policy を revert した等)、3-way は「新 → 旧」の向きになり標準を巻き戻す。
+`guard sync` / `guard bump` は計画を出さずに終了コード 2 で拒否し、`guard lint` は warn を出す。
+`extends` のタグを直すか `guard bump <その新しいタグ>` を再実行すること。`--allow-downgrade` は
+意図的に巻き戻す場合のみ。
 
 手順:
 

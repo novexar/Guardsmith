@@ -52,6 +52,14 @@ existing projects, see docs/migration/v0.7.0.md.
 
 ### Changed
 
+- The project is never rolled back silently. When `guardsmith.vars.yaml` is at a **newer**
+  tag than the policy distributes — a bump whose policy write failed, or a reverted or
+  hand-edited policy — a plain three-way would run "new → old" and undo the standards.
+  `guard sync` and `guard bump` now refuse with exit 2 and print no plan, `guard lint`
+  reports it as a `warn`, and `--allow-downgrade` is required to go back on purpose
+- `guard bump <tag>` resolves the **`extends` refs** of the target repository at the new tag
+  as well, so a baseline that widened a rule's `paths` is honoured by the same bump instead
+  of only from the next run
 - Only the standards repository named by `--repo` (default `novexar/guardsmith`) is
   followed. `guardsmith.vars.yaml` records a single `standards` tag, so a `drift3` rule
   pointing at another repository — a Layer 2 overlay such as

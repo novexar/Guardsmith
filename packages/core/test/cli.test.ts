@@ -107,9 +107,11 @@ describe("usage", () => {
       expect(sync).toContain("--write");
       expect(sync).toContain("--conflict-markers");
       expect(sync).toContain("--init-vars");
+      expect(sync).toContain("--allow-downgrade");
       expect(bump).toContain("<tag>");
       expect(bump).toContain("--repo");
       expect(bump).toContain("--conflict-markers");
+      expect(bump).toContain("--allow-downgrade");
       expect(lines.some((l) => l.startsWith("usage:") && l.includes("bump"))).toBe(true);
     } finally {
       spy.mockRestore();

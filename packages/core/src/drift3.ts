@@ -13,7 +13,7 @@ import type { Rule } from "./schema.js";
 import type { Finding } from "./lint.js";
 import { checkDrift } from "./checks.js";
 import { planSync3, type Drift3Source, type Sync3Plan } from "./sync3.js";
-import { VARS_FILENAME, type VarsDocument } from "./vars.js";
+import { compareTags, VARS_FILENAME, type VarsDocument } from "./vars.js";
 
 /**
  * drift3 検査に必要な、ポリシーだけからは得られない文脈。CLI が組み立てて runLint へ渡す。
@@ -59,6 +59,21 @@ export async function checkDrift3(
   }
   // 基準タグと配布タグが同じなら「追随すべき変更」は定義上存在しない
   if (source.baseTag === source.headTag) return [];
+
+  // 基準タグの方が新しい = policy だけ巻き戻っている。放置すると guard sync --write が
+  // 「新 → 旧」の向きで 3-way を組み、標準を静かに巻き戻す
+  if (compareTags(source.baseTag, source.headTag) > 0) {
+    return [
+      {
+        ruleId: rule.id,
+        severity: "warn",
+        message:
+          `${VARS_FILENAME} is at ${source.baseTag} but the policy distributes ` +
+          `${source.headTag} — check the \`extends\` tag in guard.policy.yaml, or re-run ` +
+          `guard bump ${source.baseTag}`,
+      },
+    ];
+  }
 
   const plan = await planSync3([source], root, ctx.vars);
   return summarize(rule, plan);

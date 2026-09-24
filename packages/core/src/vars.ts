@@ -24,6 +24,19 @@ const TAG_MESSAGE = "standards must pin a tag: vX.Y.Z";
  */
 export const TODO_VALUE = "TODO";
 
+/**
+ * タグの新旧比較(`vX.Y.Z` 前提)。a が新しければ正、古ければ負、同じなら 0。
+ * 「基準タグが配布タグより新しい」= 標準を巻き戻す状態の検出に使う。
+ */
+export function compareTags(a: string, b: string): number {
+  const parts = (t: string) => t.replace(/^v/, "").split(".").map(Number);
+  const [x, y] = [parts(a), parts(b)];
+  for (let i = 0; i < 3; i++) {
+    if (x[i] !== y[i]) return x[i] - y[i];
+  }
+  return 0;
+}
+
 /** 値が未確定(TODO)のままのキー */
 export function pendingVars(doc: Readonly<VarsDocument>): string[] {
   return Object.entries(doc.vars)

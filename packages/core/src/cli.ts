@@ -3,8 +3,8 @@
  * GuardSmith CLI
  *   guard init                     # guard.policy.yaml を生成(30秒体験の入口)
  *   guard lint [--root <dir>] [--policy <file>] [--format console|sarif|json] [--out <file>] [--no-cache] [--no-gitignore]
- *   guard sync [--root <dir>] [--policy <file>] [--write] [--no-cache] [--no-gitignore] [--conflict-markers] [--init-vars]
- *   guard bump <tag> [--root <dir>] [--policy <file>] [--repo <owner>/<repo>] [--no-cache] [--no-gitignore] [--conflict-markers]
+ *   guard sync [--root <dir>] [--policy <file>] [--write] [--no-cache] [--no-gitignore] [--conflict-markers] [--init-vars] [--allow-downgrade]
+ *   guard bump <tag> [--root <dir>] [--policy <file>] [--repo <owner>/<repo>] [--no-cache] [--no-gitignore] [--conflict-markers] [--allow-downgrade]
  *   guard new <dir>                # standards/ 一式から新規PJ雛形を展開
  *   guard explain <rule-id>
  * exit code: 0 = pass / 1 = error検出(sync/bump は衝突あり)/ 2 = 実行エラー
@@ -33,7 +33,13 @@ import {
   type SkippedDrift3,
 } from "./resolver.js";
 import { applySync, formatPlan, planSync } from "./sync.js";
-import { applySync3, formatSync3Plan, planSync3, varsBlockingWrite } from "./sync3.js";
+import {
+  applySync3,
+  formatDowngrade,
+  formatSync3Plan,
+  planSync3,
+  varsBlockingWrite,
+} from "./sync3.js";
 import { loadVars, resolveBaseTag, VARS_FILENAME, writeVars, type VarsDocument } from "./vars.js";
 import type { PolicyDocument } from "./schema.js";
 
@@ -105,8 +111,8 @@ export async function main(argv: string[]): Promise<number> {
         "usage: guard <init|lint|sync|bump|new|explain|version>\n" +
           "  guard init\n" +
           "  guard lint [--root <dir>] [--policy <file>] [--format console|sarif|json] [--out <file>] [--no-cache] [--no-gitignore]\n" +
-          "  guard sync [--root <dir>] [--policy <file>] [--write] [--no-cache] [--no-gitignore] [--conflict-markers] [--init-vars]\n" +
-          "  guard bump <tag> [--root <dir>] [--policy <file>] [--repo <owner>/<repo>] [--no-cache] [--no-gitignore] [--conflict-markers]\n" +
+          "  guard sync [--root <dir>] [--policy <file>] [--write] [--no-cache] [--no-gitignore] [--conflict-markers] [--init-vars] [--allow-downgrade]\n" +
+          "  guard bump <tag> [--root <dir>] [--policy <file>] [--repo <owner>/<repo>] [--no-cache] [--no-gitignore] [--conflict-markers] [--allow-downgrade]\n" +
           "  guard new <dir>\n" +
           "  guard explain <rule-id>",
       );
@@ -138,6 +144,8 @@ interface Flags {
   conflictMarkers: boolean;
   /** guardsmith.vars.yaml を推定生成して終了する(sync は実行しない) */
   initVars: boolean;
+  /** 基準タグの方が新しい(= 標準を巻き戻す)状態でも適用する */
+  allowDowngrade: boolean;
   /** guard bump がタグを書き換える対象リポジトリ */
   repo: string;
 }
@@ -152,6 +160,7 @@ function parseFlags(args: string[]): Flags {
     write: false,
     conflictMarkers: false,
     initVars: false,
+    allowDowngrade: false,
     repo: STANDARDS_REPO,
   };
   for (let i = 0; i < args.length; i++) {
@@ -166,6 +175,7 @@ function parseFlags(args: string[]): Flags {
     else if (a === "--write") f.write = true;
     else if (a === "--conflict-markers") f.conflictMarkers = true;
     else if (a === "--init-vars") f.initVars = true;
+    else if (a === "--allow-downgrade") f.allowDowngrade = true;
     else throw new Error(`unknown flag: ${a}`);
   }
   if (!["console", "sarif", "json"].includes(f.format))
@@ -319,7 +329,14 @@ async function syncThreeWay(
   const plan = await planSync3(resolved.sources, root, vars, {
     gitignore: !f.noGitignore,
     conflictMarkers: f.conflictMarkers,
+    allowDowngrade: f.allowDowngrade,
   });
+
+  // 基準タグの方が新しい = 適用すると標準が巻き戻る。計画も出さずに実行エラーにする
+  if (plan.downgrade !== undefined) {
+    console.error(formatDowngrade(plan.downgrade));
+    return 2;
+  }
 
   // 未確定の置換値が残っているうちは 1 バイトも書かない(TODO の流し込み防止)
   const blocking = f.write ? varsBlockingWrite(plan, vars) : null;
@@ -357,6 +374,7 @@ async function bump(args: string[]): Promise<number> {
     noCache: f.noCache,
     gitignore: !f.noGitignore,
     conflictMarkers: f.conflictMarkers,
+    allowDowngrade: f.allowDowngrade,
   });
 }
 

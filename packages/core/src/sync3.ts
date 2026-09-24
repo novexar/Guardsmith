@@ -15,7 +15,13 @@ import { projectPath, writeAtomically, type PendingWrite } from "./atomic.js";
 import { createGlobScope, globFiles, type GlobScope } from "./glob.js";
 import { detectEol, merge3, type ConflictRegion } from "./merge3.js";
 import { STAMP_RE, normalizeMaster, stampFor } from "./normalize.js";
-import { pendingVars, varsTextWithTag, VARS_FILENAME, type VarsDocument } from "./vars.js";
+import {
+  compareTags,
+  pendingVars,
+  varsTextWithTag,
+  VARS_FILENAME,
+  type VarsDocument,
+} from "./vars.js";
 
 export type Sync3Kind =
   | "merge" // クリーンに適用できる
@@ -51,6 +57,12 @@ export interface Sync3Plan {
    * 「指定したのに 1 ファイルも書かれない」事故になるため、明示的に持ち回す。
    */
   conflictMarkers: boolean;
+  /**
+   * 基準タグが配布タグより新しいために計画を作らなかった場合の内訳。
+   * policy だけ巻き戻った(bump の policy 書込失敗・revert・手編集)ときに、
+   * 3-way が「新 → 旧」の向きで走って標準を静かに巻き戻すのを防ぐ。
+   */
+  downgrade?: Sync3Downgrade;
 }
 
 /** drift3 ルール 1 本分の入力。CLI / resolver が組み立てる */
@@ -68,6 +80,14 @@ export interface Drift3Source {
 export interface Sync3Options {
   gitignore?: boolean;
   conflictMarkers?: boolean;
+  /** 基準タグの方が新しい(= 標準を巻き戻す)状態でも計画を作る */
+  allowDowngrade?: boolean;
+}
+
+/** 基準タグが配布タグより新しい状態。計画を作らず、呼び出し側が実行エラーにする */
+export interface Sync3Downgrade {
+  baseTag: string;
+  headTag: string;
 }
 
 /** 正規化済みマスター 1 ファイル分 */
@@ -92,6 +112,22 @@ export async function planSync3(
   const actions: Sync3Action[] = [];
   const localOnly: string[] = [];
   const seen = new Set<string>();
+
+  // 基準タグの方が新しいなら、3-way は「新マスター → 旧マスター」の向きになり、
+  // 適用すると標準が静かに巻き戻る。計画自体を作らず、呼び出し側に実行エラーにさせる
+  const downgrade = options.allowDowngrade === true ? undefined : findDowngrade(sources);
+  if (downgrade !== undefined) {
+    return {
+      actions,
+      localOnly,
+      conflicted: [],
+      baseTag: downgrade.baseTag,
+      nextTag: downgrade.headTag,
+      conflictMarkers: options.conflictMarkers === true,
+      downgrade,
+    };
+  }
+
   const localScope = await createGlobScope(rootDir, { gitignore: options.gitignore });
   // マスターは配布物そのもの。ローカルの .gitignore を適用する対象ではない
   const scopes = new Map<string, GlobScope>();
@@ -187,6 +223,22 @@ export function varsBlockingWrite(
   return (
     `${VARS_FILENAME} is incomplete — ${parts.join("; ")}\n` +
     "fill them in before writing (an unresolved value would be written into the project)"
+  );
+}
+
+/** 基準タグが配布タグより新しい source を探す(最初の 1 件) */
+function findDowngrade(sources: readonly Drift3Source[]): Sync3Downgrade | undefined {
+  const hit = sources.find((s) => compareTags(s.baseTag, s.headTag) > 0);
+  return hit === undefined ? undefined : { baseTag: hit.baseTag, headTag: hit.headTag };
+}
+
+/** 巻き戻し状態の説明文(sync / bump / lint で同じ文言を使う) */
+export function formatDowngrade(d: Readonly<Sync3Downgrade>): string {
+  return (
+    `${VARS_FILENAME} is at ${d.baseTag} but the policy distributes ${d.headTag} — ` +
+    "applying this would roll the standards back. Check the `extends` tag in " +
+    `guard.policy.yaml (re-run \`guard bump ${d.baseTag}\` if the policy was reverted), ` +
+    "or pass --allow-downgrade if going back is what you want"
   );
 }
 

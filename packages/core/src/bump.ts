@@ -12,7 +12,14 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { buildDrift3Sources, Drift3PolicyError, loadPolicyWithMeta } from "./resolver.js";
 import { writeAtomically } from "./atomic.js";
 import { formatPlan, planSync, syncWrites } from "./sync.js";
-import { applySync3, formatSync3Plan, planSync3, sync3Writes, varsBlockingWrite } from "./sync3.js";
+import {
+  applySync3,
+  formatDowngrade,
+  formatSync3Plan,
+  planSync3,
+  sync3Writes,
+  varsBlockingWrite,
+} from "./sync3.js";
 import { loadVars, TAG_RE, VARS_FILENAME } from "./vars.js";
 import type { RemoteOptions } from "./remote.js";
 
@@ -60,6 +67,8 @@ export interface BumpOptions extends RemoteOptions {
   repo: string;
   gitignore?: boolean;
   conflictMarkers?: boolean;
+  /** 基準タグの方が新しい(= 標準を巻き戻す)状態でも適用する */
+  allowDowngrade?: boolean;
 }
 
 /** 0 = 適用完了 / 1 = 衝突あり(policy も vars も未変更) / 2 = 実行エラー */
@@ -123,7 +132,14 @@ export async function runBump(opts: BumpOptions): Promise<number> {
   const plan = await planSync3(resolved.sources, rootDir, vars, {
     gitignore: opts.gitignore,
     conflictMarkers: opts.conflictMarkers,
+    allowDowngrade: opts.allowDowngrade,
   });
+
+  // 基準タグの方が新しい = この bump は標準を巻き戻す。計画を出さずに止める
+  if (plan.downgrade !== undefined) {
+    console.error(formatDowngrade(plan.downgrade));
+    return 2;
+  }
 
   // 未確定の置換値が残っていれば、衝突判定より前に止める(TODO が PJ へ書かれるのを防ぐ)
   const blocking = varsBlockingWrite(plan, vars);
@@ -157,7 +173,20 @@ export async function runBump(opts: BumpOptions): Promise<number> {
   writeAtomically(rootDir, [...sync3Writes(plan, rootDir, vars), ...syncWrites(sectionPlan)]);
   // policy だけはバッチ外。--policy でリポジトリ外を指しうるうえ、ここで失敗しても
   // 「ファイルは新・policy は旧」= 次回 bump で再適用できる安全側に倒れる(R8)
-  if (rewrite.rewritten.length > 0) writeFileSync(policyFile, rewrite.text);
+  if (rewrite.rewritten.length > 0) {
+    try {
+      writeFileSync(policyFile, rewrite.text);
+    } catch (e) {
+      console.error(
+        `${(e as Error).message}
+the files and ${VARS_FILENAME} are at ${tag}, but ` +
+          `guard.policy.yaml still pins ${plan.baseTag}. Fix the write permission and ` +
+          `re-run \`guard bump ${tag}\` — do **not** run \`guard sync --write\`, which ` +
+          "would see a newer project than the policy distributes",
+      );
+      return 2;
+    }
+  }
   console.log(formatSync3Plan(plan, true));
   if (sectionPlan.actions.length > 0) console.log(formatPlan(sectionPlan, true));
   for (const r of rewrite.rewritten) {
