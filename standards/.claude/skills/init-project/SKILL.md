@@ -98,7 +98,9 @@ vars:
 - [ ] 不要エージェント・不要テンプレが削除されている
 - [ ] `guardsmith.vars.yaml` の `vars` に、**削除していない全ファイルのプレースホルダが揃っている**
       (マスター側の各ファイルから `grep -oh '{{[^}]*}}' | sort -u` でキーを洗い出し、
-      削除した行・削除したファイル由来のキーを除いた全件が vars にあることを突き合わせる)
+      削除した行・削除したファイル由来のキーを除いた全件が vars にあることを突き合わせる。
+      1 つでも欠けている、または値が `TODO` のままだと `guard sync --write` と `guard bump` は
+      終了コード 2 で止まる)
 - [ ] `guardsmith.vars.yaml` の `standards` が CLAUDE.md 末尾スタンプのタグと一致している
 - [ ] `guardsmith.vars.yaml` に秘密情報(トークン・API キー・パスワード・接続文字列)が含まれていない
 
@@ -114,19 +116,28 @@ guard sync          # dry-run。差分と衝突予測を表示する(ファイ�
 guard bump v0.7.0   # 取り込み。policy の extends タグと vars の standards も更新する
 ```
 
+`guard bump` は 3-way 取り込みに加えて `.claude/skills/**` の節単位同期も行う。
+bump の後に `guard sync --write` を別途実行する必要はない。
+
+追随するのは `--repo`(既定 `novexar/guardsmith`)が指す標準リポジトリのみ。別リポジトリを
+指す `drift3`(Layer2 のオーバーレイ等)は警告を出したうえで対象外にし、そのルール自身が
+固定しているタグのままにする(`guardsmith.vars.yaml` の `standards` は 1 本しか持てないため)。
+同じ理由で、対象リポジトリ向けの `drift3` はポリシー全体で 1 本まで。
+
 | コマンド | フラグ | 終了コード |
 |---|---|---|
-| `guard sync` | `--root <dir>` / `--policy <file>` / `--write` / `--no-cache` / `--no-gitignore` / `--conflict-markers` / `--init-vars` | 0 = 衝突なし(dry-run 含む)/ 1 = 衝突あり / 2 = 実行エラー |
-| `guard bump <tag>` | `--root <dir>` / `--policy <file>` / `--repo <owner>/<repo>` / `--no-cache` / `--no-gitignore` / `--conflict-markers` | 0 = 適用完了 / 1 = 衝突あり(policy も vars も未変更)/ 2 = 実行エラー |
+| `guard sync` | `--root <dir>` / `--policy <file>` / `--write` / `--no-cache` / `--no-gitignore` / `--conflict-markers` / `--init-vars` | 0 = 衝突なし(dry-run 含む)/ 1 = 衝突あり / 2 = 実行エラー・`--write` で vars 未完成 |
+| `guard bump <tag>` | `--root <dir>` / `--policy <file>` / `--repo <owner>/<repo>` / `--no-cache` / `--no-gitignore` / `--conflict-markers` | 0 = 適用完了 / 1 = 衝突あり(policy も vars も未変更)/ 2 = 実行エラー・vars 未完成 |
 
 手順:
 
 1. `guard sync`(dry-run)で差分と衝突予測を確認する。
 2. `guard bump <tag>` を実行する。衝突が無ければ policy・ファイル・vars・スタンプが一括で更新される。
-3. 衝突があると `guard bump` は **policy も vars もファイルも一切書かずに終了コード 1** で止まり、
-   衝突ファイルを列挙する。**衝突が出たファイルだけ** PM が内容を確認して解決する
+3. 衝突があると `guard bump` は **policy も vars もファイルも skills も一切書かずに終了コード 1** で
+   止まり、衝突ファイルを列挙する。**衝突が出たファイルだけ** PM が内容を確認して解決する
    (マーカー入りの出力が必要なら `--conflict-markers` を付けて再実行する)。
-4. 解決後に `guard sync --write` で改めて適用する。
+4. 解決後に `guard sync --write` で改めて適用する。こちらも衝突が残っている間は
+   節単位同期を含めて 1 ファイルも書かない。
 
 `guardsmith.vars.yaml` が無い PJ(v0.7.0 より前に初期化した PJ)は、先に `guard sync --init-vars` で
 雛形を生成し、`TODO` と曖昧候補を PM が確定させてから上記の手順に入る。

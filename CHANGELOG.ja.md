@@ -29,8 +29,9 @@
   1 のままで、基準タグは進めない
 - `guard bump <tag> [--repo <owner>/<repo>]`: `guard.policy.yaml` のタグ固定参照を書き換え
   (正規表現によるテキスト置換のみ。コメント・インデント・キー順は保存される)、同じ 3-way
-  計画で標準の変更を適用し、`standards` と `CLAUDE.md` のスタンプを進める。衝突時は
-  **1 ファイルも書かず** 1 を返す。`vars` に `TODO` が残っている間は実行を拒否する
+  計画で標準の変更を適用し、**`.claude/skills/**` の節単位同期も実行**したうえで、
+  `standards` と `CLAUDE.md` のスタンプを進める。1 コマンドで完結し、後から別手順を
+  実行する必要はない。衝突時は **1 ファイルも書かず** 1 を返す
 - 新 check `drift3`(`with: { source, paths }`): 未適用の標準変更を rule の severity で
   報告する(`standards v0.6.0 → v0.7.0 not applied (N files, applies cleanly) —
 run: guard bump v0.7.0`)。手作業が要るものは `info`。`guardsmith.vars.yaml` が無い場合は
@@ -44,6 +45,22 @@ run: guard bump v0.7.0`)。手作業が要るものは `info`。`guardsmith.vars
   する(init-project が記入する)
 
 ### Changed
+
+- 追随するのは `--repo`(既定 `novexar/guardsmith`)が指す標準リポジトリのみ。
+  `guardsmith.vars.yaml` が持つ `standards` タグは 1 本なので、別リポジトリを指す `drift3`
+  (Layer2 のオーバーレイ `github:novexar/guardsmith-private//standards@v3.0.0` など)は
+  自分のタグと突き合わせず、警告を出したうえでそのルール自身の固定タグのままにする。
+  同じ理由で、対象リポジトリ向けの `drift3` はポリシー全体で 1 本まで
+- PJ の置換値が未完成のうちは書き込まない。`vars` の値が `TODO` のまま、または標準が使う
+  プレースホルダが不足している場合、`guard sync --write` と `guard bump` は終了コード 2 で
+  止まる。dry-run と `guard lint` は従来どおり `info` で不足キーを名指しするだけ
+  (未確定の値がそのまま PJ へ書き込まれるのを防ぐため、書き込みだけを拒否する)
+- 中途半端な適用を残さない。`guard sync --write` は先に 3-way の計画を作るため、衝突が
+  あれば節単位モードの復元も止まる。実際に書くファイルも全件を一時ファイルへ書き切って
+  から rename で確定する
+- `paths` のパターンに `..` セグメントを書けなくし、実行時も書き込み先を PJ ルート配下に
+  封じ込めた。`guard sync` は glob にマッチしたパスへ書き込み、policy は remote extends から
+  継承されうるため、`../**/*.md` のようなパターンはリポジトリ外への書き込み経路になっていた
 
 - 標準 / init-project: インタビュー結果を適用と同時に `guardsmith.vars.yaml` へ**記録**
   するようにし、「マスター更新への追随」手順を手動 diff から `guard bump <tag>` に変更

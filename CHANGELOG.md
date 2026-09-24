@@ -33,9 +33,10 @@ existing projects, see docs/migration/v0.7.0.md.
   untouched. The exit code stays 1 and the standards tag is not advanced
 - `guard bump <tag> [--repo <owner>/<repo>]`: rewrites the pinned tags in
   `guard.policy.yaml` (plain text replacement — comments, indentation and key order are
-  preserved), applies the standards' change through the same 3-way plan, and advances the
-  `standards` tag and the `CLAUDE.md` stamp. On a conflict it writes **nothing** and exits
-  1, and it refuses to run while a `TODO` remains in `vars`
+  preserved), applies the standards' change through the same 3-way plan, **also runs the
+  section-level sync for `.claude/skills/**`**, and advances the `standards` tag and the
+  `CLAUDE.md` stamp — one command, nothing left to run afterwards. On a conflict it writes
+  **nothing** and exits 1
 - New check `drift3` (`with: { source, paths }`): reports a standards change that has not
   been applied yet at the rule's severity — `standards v0.6.0 → v0.7.0 not applied
 (N files, applies cleanly) — run: guard bump v0.7.0` — and one that needs hands as `info`.
@@ -50,6 +51,25 @@ existing projects, see docs/migration/v0.7.0.md.
   `vars`) for init-project to fill in
 
 ### Changed
+
+- Only the standards repository named by `--repo` (default `novexar/guardsmith`) is
+  followed. `guardsmith.vars.yaml` records a single `standards` tag, so a `drift3` rule
+  pointing at another repository — a Layer 2 overlay such as
+  `github:novexar/guardsmith-private//standards@v3.0.0` — keeps its own pinned tag, is
+  reported with a warning, and is never resolved against yours. For the same reason a
+  policy may carry at most one `drift3` rule for the target repository
+- Writes are refused while the project's values are incomplete: `guard sync --write` and
+  `guard bump` exit 2 when a `vars` value is still `TODO` or a placeholder used by the
+  standards is missing. A dry-run and `guard lint` still report it as `info` and name the
+  keys — only writing is blocked, because an unfilled value would otherwise be written into
+  the project verbatim
+- Nothing is half-applied: `guard sync --write` builds the 3-way plan first, so a conflict
+  suppresses the section-level restore as well, and every file it does write is staged and
+  renamed into place only once all of them are ready
+- `paths` patterns may no longer contain a `..` segment, and every write is confined to the
+  project root at run time. `guard sync` writes to the paths a glob matched, and a policy
+  can be inherited from a remote `extends`, so a pattern like `../**/*.md` was a way to
+  write outside the repository
 
 - Standards / init-project: the interview results are now **recorded** in
   `guardsmith.vars.yaml` as they are applied, and the "following the master" procedure is
