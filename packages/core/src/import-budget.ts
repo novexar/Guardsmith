@@ -18,6 +18,16 @@
  *  (e) 「Import parsing skips Markdown code spans and fenced code blocks」。
  *      バッククォートで囲めば `@README` は取り込まれない
  *
+ * ── コードとして読み飛ばす範囲(公式仕様は「code spans と fenced code blocks」のみ)──
+ *  - フェンスドコードブロック: ``` / ~~~ で開き、**インデント量は問わない**(リスト項目の
+ *    中に置かれたフェンスが本リポジトリの文書で頻出するため)。閉じは同じマーカー文字・
+ *    同じ長さ以上・info string 無しの行
+ *  - コードスパン: バッククォートの対応で判定し、**段落(空行区切り)単位**でマスクする。
+ *    行をまたぐスパンを扱うためで、段落内に閉じが無いバッククォートはリテラルとして残す
+ *  - **インデントコードブロック(4 スペース)はコードとして扱わない**。公式仕様に挙がって
+ *    おらず、CLAUDE.md ではネストしたリスト項目が 4 スペース字下げされるため、コード扱いに
+ *    すると常駐量を過小計上する
+ *
  * 公式仕様に書かれておらず本実装で補った点(いずれも保守的側に倒している):
  *  - パス終端の定義: 空白・引用符・山括弧・`|`・`*`・各種括弧・`,`・`;`、および日本語
  *    ドキュメントで頻出する全角括弧・読点・句点で終端し、末尾の句読点(`.,;:!?`)は落とす
@@ -26,8 +36,11 @@
  *    `詳細は@docs/X.md` のように `@` の前に空白が無いのが普通で、空白必須にすると過小計上で
  *    check が実質無効になるため。`user@example.com` は従来どおり除外される
  *  - 解決できない参照のうち「パス形状でない」もの(`/` も `.` も含まない、または末尾が
- *    非 ASCII = 日本語の助詞等が続いている)は unresolved の info を出さない。終端文字集合を
- *    完璧にする代わりの措置で、`@docs/日本語.md`(末尾は ASCII の `.md`)は壊さない
+ *    非 ASCII = 日本語の助詞等が続いている)は unresolved の info を出さない。また同じ参照は
+ *    初出の位置だけ報告する(`@types/node` のようなスコープ付きパッケージ名のノイズ対策)。
+ *    `@docs/日本語.md` は末尾が ASCII の `.md` なので報告対象のまま
+ *  - 同一ファイルの別名(大文字小文字の違い・root 内のシンボリックリンク経由)は realpath を
+ *    キーにして 1 回だけ数える。表示は最初に到達した字句パスを使う
  *  - セキュリティ: root(走査ルート)の外に解決される参照は **読みに行かない**。二重の防御で
  *    封じ込め、いずれも info「outside root, not measured」として報告するに留める:
  *      1. 文字列レベル: `..` での脱出・絶対パス・`~` 始まり・`\` を含む参照を弾く
@@ -61,8 +74,8 @@ export interface ImportRef {
   readonly line: number;
 }
 
-/** フェンス行(``` / ~~~)。info string は m[2] */
-const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+/** フェンス行。インデント量は問わない。m[2] = マーカー、m[3] = info string */
+const FENCE = /^(\s*)(`{3,}|~{3,})(.*)$/;
 
 /**
  * `@<path>`。直前がメールアドレスのローカル部を構成する文字でなければインポートとみなす。
@@ -94,31 +107,54 @@ export function isPathShaped(ref: string): boolean {
 
 /**
  * Markdown から `@` インポート参照を抽出する。
- * フェンスドコードブロックとコードスパンは公式仕様どおり読み飛ばす。
+ * フェンスドコードブロックは丸ごと、コードスパンは段落単位で読み飛ばす。
  */
 export function extractImportRefs(text: string): ImportRef[] {
   const refs: ImportRef[] = [];
-  let fence: string | null = null;
   const lines = text.split(/\r?\n/);
+  let fence: string | null = null;
+  let chunk: string[] = [];
+  let chunkStart = 1;
+
+  const flush = (): void => {
+    if (chunk.length > 0) collectChunk(chunk, chunkStart, refs);
+    chunk = [];
+  };
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const m = FENCE.exec(line);
     if (fence !== null) {
-      if (m !== null && isClosingFence(m[1], m[2], fence)) fence = null;
+      if (m !== null && isClosingFence(m[2], m[3], fence)) fence = null;
       continue;
     }
     if (m !== null) {
-      fence = m[1];
+      flush();
+      fence = m[2];
       continue;
     }
-    for (const ref of refsInLine(maskCodeSpans(line))) refs.push({ ref, line: i + 1 });
+    if (line.trim() === "") {
+      flush(); // 段落の区切り。未閉のバッククォートを次の段落へ持ち越さない
+      continue;
+    }
+    if (chunk.length === 0) chunkStart = i + 1;
+    chunk.push(line);
   }
+  flush();
   return refs;
 }
 
 /** 閉じフェンスは同じ文字・同じ長さ以上・info string 無し */
 function isClosingFence(marker: string, rest: string, open: string): boolean {
   return marker[0] === open[0] && marker.length >= open.length && rest.trim() === "";
+}
+
+/** 1段落分をまとめてマスクしてから行ごとに走査する(行をまたぐコードスパン対策) */
+function collectChunk(lines: readonly string[], startLine: number, out: ImportRef[]): void {
+  const masked = maskCodeSpans(lines.join("\n")).split("\n");
+  for (let i = 0; i < masked.length; i++) {
+    for (const ref of refsInLine(masked[i])) out.push({ ref, line: startLine + i });
+  }
 }
 
 function refsInLine(line: string): string[] {
@@ -128,54 +164,58 @@ function refsInLine(line: string): string[] {
   while ((m = IMPORT.exec(line)) !== null) {
     const ref = m[1].replace(TRAILING_PUNCT, "");
     if (ref.length > 0) out.push(ref);
-    IMPORT.lastIndex = m.index + m[0].length;
   }
   return out;
 }
 
+/** 改行以外を空白に潰す(行番号と行長を保つ) */
+function blankOut(text: string): string {
+  return text.replace(/[^\n]/g, " ");
+}
+
 /**
- * コードスパン(`...` / ``...``)を同じ長さの空白へ置き換える。
- * 位置と行長を保つため、インポート抽出の前処理としてそのまま使える。
+ * コードスパン(`...` / ``...``)を同じ長さの空白へ置き換える。改行は保つので、
+ * 段落をまとめて渡せば行をまたぐスパンも扱える。
  * 閉じが見つからないバッククォートはコードスパンではないので原文のまま残す。
  */
-export function maskCodeSpans(line: string): string {
+export function maskCodeSpans(text: string): string {
   let out = "";
   let i = 0;
-  while (i < line.length) {
-    if (line[i] !== "`") {
-      out += line[i];
+  while (i < text.length) {
+    if (text[i] !== "`") {
+      out += text[i];
       i++;
       continue;
     }
-    const n = runLength(line, i);
-    const close = findClosingRun(line, i + n, n);
+    const n = runLength(text, i);
+    const close = findClosingRun(text, i + n, n);
     if (close < 0) {
-      out += line.slice(i, i + n);
+      out += text.slice(i, i + n);
       i += n;
       continue;
     }
-    out += " ".repeat(close + n - i);
+    out += blankOut(text.slice(i, close + n));
     i = close + n;
   }
   return out;
 }
 
 /** 位置 start から続くバッククォートの数 */
-function runLength(line: string, start: number): number {
+function runLength(text: string, start: number): number {
   let n = 0;
-  while (start + n < line.length && line[start + n] === "`") n++;
+  while (start + n < text.length && text[start + n] === "`") n++;
   return n;
 }
 
 /** ちょうど n 個のバッククォート連続の開始位置(無ければ -1) */
-function findClosingRun(line: string, from: number, n: number): number {
+function findClosingRun(text: string, from: number, n: number): number {
   let j = from;
-  while (j < line.length) {
-    if (line[j] !== "`") {
+  while (j < text.length) {
+    if (text[j] !== "`") {
       j++;
       continue;
     }
-    const k = runLength(line, j);
+    const k = runLength(text, j);
     if (k === n) return j;
     j += k;
   }
@@ -217,22 +257,31 @@ function normalizeRelative(path: string): string | null {
   return out.length === 0 ? null : out.join("/");
 }
 
-/* ---------- ファイル読み込み(root 封じ込め) ---------- */
+/* ---------- ファイル解決(root 封じ込め) ---------- */
 
-/** 読み込み結果。outside は root 外、missing は解決できない参照 */
-type Loaded =
-  | { readonly kind: "ok"; readonly text: string }
+/** 解決結果。outside は root 外、missing は通常ファイルとして存在しない */
+type Found =
+  | { readonly kind: "real"; readonly real: string }
   | { readonly kind: "outside" }
   | { readonly kind: "missing" };
 
-const OUTSIDE: Loaded = { kind: "outside" };
-const MISSING: Loaded = { kind: "missing" };
+const OUTSIDE: Found = { kind: "outside" };
+const MISSING: Found = { kind: "missing" };
+
+/**
+ * realpath を取る。`native` を使うのは、Windows / macOS の大文字小文字を区別しない
+ * ファイルシステムで表記ゆれ(`docs/a.md` と `docs/A.MD`)を同一キーに正規化するため
+ * (JS 実装の realpathSync は与えられた表記をそのまま返す)。
+ */
+function canonical(abs: string): string {
+  return realpathSync.native(abs);
+}
 
 /** realpath 解決済みの root(シンボリックリンク経由の脱出を判定する基準) */
 export function realRoot(root: string): string {
   const abs = resolve(root);
   try {
-    return realpathSync(abs);
+    return canonical(abs);
   } catch {
     return abs;
   }
@@ -245,25 +294,120 @@ export function isInsideRoot(rootReal: string, abs: string): boolean {
 }
 
 /**
- * root 相対パスを読み込む。二重の防御:
+ * root 相対パスを realpath へ解決する。二重の防御:
  *  1. resolveImportRef が `..` / 絶対パス / `~` / `\` を弾く(文字列レベル)
  *  2. ここで realpath を取り、root の realpath 配下にあることを確認する(リンクレベル)
- * root 配下のシンボリックリンクが外を指していても、2 で outside として弾かれる。
+ * 返す realpath は重複計上を防ぐキーにもなる(大文字小文字の別名・リンク別名を同一視)。
  */
-function loadInsideRoot(rootReal: string, rel: string): Loaded {
+function resolveInsideRoot(rootReal: string, rel: string): Found {
   let real: string;
   try {
-    real = realpathSync(join(rootReal, rel));
+    real = canonical(join(rootReal, rel));
   } catch {
     return MISSING; // 存在しない = unresolved
   }
   if (!isInsideRoot(rootReal, real)) return OUTSIDE;
   try {
     if (!statSync(real).isFile()) return MISSING;
-    return { kind: "ok", text: readFileSync(real, "utf8") };
   } catch {
     return MISSING;
   }
+  return { kind: "real", real };
+}
+
+function readTextFile(abs: string): string | null {
+  try {
+    return readFileSync(abs, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+/* ---------- 走査 ---------- */
+
+/** 走査中に持ち回る状態。キーはすべて realpath(別名の二重計上を防ぐ) */
+interface Walk {
+  readonly ruleId: string;
+  readonly rootReal: string;
+  readonly maxDepth: number;
+  /** realpath -> 文字数 */
+  readonly sizes: Map<string, number>;
+  /** realpath -> 表示名(最初に到達した字句パス) */
+  readonly names: Map<string, string>;
+  /** realpath -> 測定したときの最小深さ */
+  readonly depths: Map<string, number>;
+  readonly notes: Finding[];
+  /** 既に報告した unresolved の参照文字列 */
+  readonly reported: Set<string>;
+  /** 深さ上限で打ち切った参照。別の浅い経路で測れた場合は報告しない */
+  readonly overDepth: { key: string; finding: Finding }[];
+}
+
+function info(ruleId: string, message: string, file: string, line?: number): Finding {
+  return { ruleId, severity: "info", file, ...(line === undefined ? {} : { line }), message };
+}
+
+function note(w: Walk, message: string, file: string, line: number): void {
+  w.notes.push(info(w.ruleId, message, file, line));
+}
+
+/** 同じ参照は初出だけ報告し、パス形状でないものは報告しない */
+function noteUnresolved(w: Walk, ref: string, where: string, file: string, line: number): void {
+  if (!isPathShaped(ref) || w.reported.has(ref)) return;
+  w.reported.add(ref);
+  note(w, `unresolved import: ${ref} ${where}`, file, line);
+}
+
+function walk(
+  w: Walk,
+  fromRel: string,
+  body: string,
+  depth: number,
+  stack: readonly string[],
+): void {
+  for (const { ref, line } of extractImportRefs(body)) {
+    visitRef(w, fromRel, ref, line, depth, stack);
+  }
+}
+
+function visitRef(
+  w: Walk,
+  fromRel: string,
+  ref: string,
+  line: number,
+  depth: number,
+  stack: readonly string[],
+): void {
+  const where = `(from ${fromRel}:${line})`;
+  const outside = (): void =>
+    note(w, `import outside root, not measured: ${ref} ${where}`, fromRel, line);
+
+  const target = resolveImportRef(ref, fromRel);
+  if (target === null) return outside();
+  const found = resolveInsideRoot(w.rootReal, target);
+  if (found.kind === "outside") return outside();
+  if (found.kind === "missing") return noteUnresolved(w, ref, where, fromRel, line);
+
+  const key = found.real;
+  if (stack.includes(key)) return note(w, `import cycle detected: ${ref} ${where}`, fromRel, line);
+  const childDepth = depth + 1;
+  // 同じかより浅い深さで探索済みなら打ち切る。深い経路で先に到達していた場合は子を
+  // 取りこぼしているため降り直す(深さ優先の探索順に結果が依存しないようにする)
+  const seen = w.depths.get(key);
+  if (seen !== undefined && seen <= childDepth) return;
+  if (childDepth > w.maxDepth) {
+    const message = `import depth limit exceeded (max_depth: ${w.maxDepth}): ${ref} ${where}`;
+    w.overDepth.push({ key, finding: info(w.ruleId, message, fromRel, line) });
+    return;
+  }
+  const text = readTextFile(key);
+  if (text === null) return noteUnresolved(w, ref, where, fromRel, line);
+  if (!w.sizes.has(key)) {
+    w.sizes.set(key, text.length); // 合計への加算は初回のみ
+    w.names.set(key, target);
+  }
+  w.depths.set(key, childDepth);
+  walk(w, target, text, childDepth, [...stack, key]);
 }
 
 /* ---------- check 本体 ---------- */
@@ -291,114 +435,62 @@ export async function checkImportBudget(
 }
 
 function measureEntry(rule: ImportBudgetRule, rootReal: string, entry: string): Finding[] {
-  const loaded = loadInsideRoot(rootReal, entry);
-  if (loaded.kind !== "ok") {
-    const reason =
-      loaded.kind === "outside"
+  const found = resolveInsideRoot(rootReal, entry);
+  if (found.kind !== "real") {
+    const message =
+      found.kind === "outside"
         ? `entry file resolves outside root, not measured: ${entry}`
         : `unreadable file: ${entry}`;
-    return [{ ruleId: rule.id, severity: "info", file: entry, message: reason }];
+    return [info(rule.id, message, entry)];
   }
-  const text = loaded.text;
-  const sizes = new Map<string, number>([[entry, text.length]]);
-  /** そのファイルを測ったときの最小深さ。より浅い経路で再到達したら降り直す */
-  const depths = new Map<string, number>([[entry, 0]]);
-  const notes: Finding[] = [];
-  /** 深さ上限で打ち切った参照。別の浅い経路で測れた場合は報告しない */
-  const overDepth: { target: string; finding: Finding }[] = [];
-  const maxDepth = rule.with.max_depth ?? DEFAULT_IMPORT_MAX_DEPTH;
+  const text = readTextFile(found.real);
+  if (text === null) return [info(rule.id, `unreadable file: ${entry}`, entry)];
 
-  const info = (message: string, file: string, line: number): Finding => ({
+  const w: Walk = {
     ruleId: rule.id,
-    severity: "info",
-    file,
-    line,
-    message,
-  });
-  const note = (message: string, file: string, line: number): void => {
-    notes.push(info(message, file, line));
+    rootReal,
+    maxDepth: rule.with.max_depth ?? DEFAULT_IMPORT_MAX_DEPTH,
+    sizes: new Map([[found.real, text.length]]),
+    names: new Map([[found.real, entry]]),
+    depths: new Map([[found.real, 0]]),
+    notes: [],
+    reported: new Set(),
+    overDepth: [],
   };
-
-  const visit = (rel: string, body: string, depth: number, stack: readonly string[]): void => {
-    for (const { ref, line } of extractImportRefs(body)) {
-      const from = `(from ${rel}:${line})`;
-      const target = resolveImportRef(ref, rel);
-      if (target === null) {
-        note(`import outside root, not measured: ${ref} ${from}`, rel, line);
-        continue;
-      }
-      if (stack.includes(target)) {
-        note(`import cycle detected: ${ref} ${from}`, rel, line);
-        continue;
-      }
-      const childDepth = depth + 1;
-      // 同じかより浅い深さで探索済みなら打ち切る。深い経路で先に到達していた場合は
-      // 子を取りこぼしているため降り直す(深さ優先の探索順に依存しないようにする)
-      const seen = depths.get(target);
-      if (seen !== undefined && seen <= childDepth) continue;
-      if (childDepth > maxDepth) {
-        overDepth.push({
-          target,
-          finding: info(
-            `import depth limit exceeded (max_depth: ${maxDepth}): ${ref} ${from}`,
-            rel,
-            line,
-          ),
-        });
-        continue;
-      }
-      const content = loadInsideRoot(rootReal, target);
-      if (content.kind === "outside") {
-        // 文字列レベルでは root 内だが、シンボリックリンクが外を指しているケース
-        note(`import outside root, not measured: ${ref} ${from}`, rel, line);
-        continue;
-      }
-      if (content.kind === "missing") {
-        // パス形状でない参照(助詞が続いた等)はノイズになるため報告しない
-        if (isPathShaped(ref)) note(`unresolved import: ${ref} ${from}`, rel, line);
-        continue;
-      }
-      if (!sizes.has(target)) sizes.set(target, content.text.length); // 合計は1回だけ
-      depths.set(target, childDepth);
-      visit(target, content.text, childDepth, [...stack, target]);
-    }
-  };
-  visit(entry, text, 0, [entry]);
+  walk(w, entry, text, 0, [found.real]);
   // 後から浅い経路で測れたものは「深すぎる」ではないので落とす
-  notes.push(...overDepth.filter((d) => !sizes.has(d.target)).map((d) => d.finding));
+  w.notes.push(...w.overDepth.filter((d) => !w.sizes.has(d.key)).map((d) => d.finding));
+  return buildFindings(rule, entry, w);
+}
 
-  const total = [...sizes.values()].reduce((a, b) => a + b, 0);
-  const findings: Finding[] = [
-    {
-      ruleId: rule.id,
-      severity: "info",
-      file: entry,
-      message:
-        `resident context: ${sizes.size} files, ${total} chars ` +
-        `(≈${Math.ceil(total / CHARS_PER_TOKEN)} tokens, rough estimate)\n` +
-        formatBreakdown(sizes),
-    },
-    ...notes,
-  ];
+function buildFindings(rule: ImportBudgetRule, entry: string, w: Walk): Finding[] {
+  const total = [...w.sizes.values()].reduce((a, b) => a + b, 0);
+  const summary =
+    `resident context: ${w.sizes.size} files, ${total} chars ` +
+    `(≈${Math.ceil(total / CHARS_PER_TOKEN)} tokens, rough estimate)\n` +
+    formatBreakdown(w);
+  const findings: Finding[] = [info(rule.id, summary, entry), ...w.notes];
   const max = rule.with.max_chars;
   if (max !== undefined && total > max) {
     findings.push({
       ruleId: rule.id,
       severity: rule.severity,
       file: entry,
-      message: `resident context ${total} chars exceeds max_chars ${max} (${sizes.size} files)`,
+      message: `resident context ${total} chars exceeds max_chars ${max} (${w.sizes.size} files)`,
     });
   }
   return findings;
 }
 
 /** ファイル別内訳(大きい順)。BREAKDOWN_LIMIT を超える分は件数と合計だけ示す */
-function formatBreakdown(sizes: ReadonlyMap<string, number>): string {
-  const rows = [...sizes].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-  const lines = rows.slice(0, BREAKDOWN_LIMIT).map(([f, c]) => `  - ${f}: ${c} chars`);
+function formatBreakdown(w: Walk): string {
+  const rows = [...w.sizes]
+    .map(([key, chars]) => ({ name: w.names.get(key) ?? key, chars }))
+    .sort((a, b) => b.chars - a.chars || a.name.localeCompare(b.name));
+  const lines = rows.slice(0, BREAKDOWN_LIMIT).map((r) => `  - ${r.name}: ${r.chars} chars`);
   const rest = rows.slice(BREAKDOWN_LIMIT);
   if (rest.length > 0) {
-    const restChars = rest.reduce((a, [, c]) => a + c, 0);
+    const restChars = rest.reduce((a, r) => a + r.chars, 0);
     lines.push(`  ... and ${rest.length} others (${restChars} chars)`);
   }
   return lines.join("\n");

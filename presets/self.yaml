@@ -53,8 +53,6 @@ rules:
     with: { path: CLAUDE.md, limit: 120 }
 
   # --- 常駐量の可視化と上限 (@インポート先を含む「起動時に読み込まれる総量」) ---
-  # 注意: 旧 CLI (<= 0.4.0) は未知の check を strict スキーマで拒否するため、
-  #       本ルールを含む baseline は次期タグ (v0.6.0) 以降でのみ配布される。
   - id: claude-md/import-budget
     severity: warn
     description: CLAUDE.md と @インポート先を合わせた常駐量の可視化と上限(行数だけでは軽量と判断しない)

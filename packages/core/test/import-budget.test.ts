@@ -2,7 +2,7 @@
  * import-budget check の検証。
  * CLAUDE.md の `@` インポートを再帰解決し、起動時に常駐する総量を測る。
  */
-import { readFileSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { parse } from "yaml";
@@ -30,15 +30,28 @@ afterAll(() => {
 });
 
 /**
- * シンボリックリンクを作れる環境か(Windows は開発者モード/管理者権限が要る)。
- * 作れない環境では該当テストを skip として明示する(黙って pass させない)。
+ * ディレクトリ junction を作れる環境か。Windows でもファイルのシンボリックリンクと違い
+ * 権限が不要なため、リンク経由の検証はこちらで行う。作れない環境では skip として明示する。
  */
-const CAN_SYMLINK = ((): boolean => {
-  const probe = makeFixtureDir("gs-ib-symlink-probe");
+const CAN_JUNCTION = ((): boolean => {
+  const probe = makeFixtureDir("gs-ib-junction-probe");
   try {
-    write(probe, "t.md", "x");
-    symlinkSync(join(probe, "t.md"), join(probe, "l.md"), "file");
+    write(probe, "d/t.md", "x");
+    symlinkSync(join(probe, "d"), join(probe, "l"), "junction");
     return true;
+  } catch {
+    return false;
+  } finally {
+    rmSync(probe, { recursive: true, force: true });
+  }
+})();
+
+/** 大文字小文字を区別しないファイルシステムか(Windows / 既定の macOS) */
+const CASE_INSENSITIVE_FS = ((): boolean => {
+  const probe = makeFixtureDir("gs-ib-case-probe");
+  try {
+    write(probe, "lower.md", "x");
+    return existsSync(join(probe, "LOWER.MD"));
   } catch {
     return false;
   } finally {
@@ -280,6 +293,57 @@ describe("import-budget syntax", () => {
     expect(findings.filter((f) => f.message.startsWith("unresolved import:"))).toHaveLength(0);
   });
 
+  it("skips a fence nested inside a list item but keeps indented list content", async () => {
+    const root = fixture("gs-ib-nested-fence");
+    write(root, "docs/x.md", "X");
+    write(root, "docs/after.md", "A");
+    write(
+      root,
+      "CLAUDE.md",
+      [
+        "- item",
+        "    ```",
+        "    @docs/in-fence.md",
+        "    ```",
+        "- outer",
+        "    - nested list item with @docs/x.md", // 4 スペースはコードブロックにしない
+        "",
+        "@docs/after.md",
+      ].join("\n"),
+    );
+    const findings = await lint(root);
+    const s = summary(findings);
+    expect(fileCount(s)).toBe(3); // CLAUDE.md + x.md + after.md
+    expect(s.message).toContain("docs/x.md");
+    expect(s.message).toContain("docs/after.md");
+    expect(findings.some((f) => f.message.includes("in-fence"))).toBe(false);
+  });
+
+  it("masks a code span that spans two lines of the same paragraph", async () => {
+    const root = fixture("gs-ib-multiline-span");
+    write(root, "docs/real.md", "R");
+    write(
+      root,
+      "CLAUDE.md",
+      ["start `code", "@inside.md` end", "@docs/real.md", "", "unclosed ` and @docs/real.md"].join(
+        "\n",
+      ),
+    );
+    const findings = await lint(root);
+    const s = summary(findings);
+    expect(fileCount(s)).toBe(2); // CLAUDE.md + docs/real.md
+    expect(findings.some((f) => f.message.includes("inside.md"))).toBe(false);
+  });
+
+  it("reports a repeated unresolved reference only once", async () => {
+    const root = fixture("gs-ib-repeat");
+    write(root, "CLAUDE.md", "@types/node here\nand @types/node again\nplus @types/node\n");
+    const findings = await lint(root);
+    const u = findings.filter((f) => f.message.startsWith("unresolved import:"));
+    expect(u).toHaveLength(1);
+    expect(u[0].line).toBe(1);
+  });
+
   it("still reports an unresolved path-shaped reference, including a non-ASCII filename", async () => {
     const root = fixture("gs-ib-unresolved-shape");
     write(root, "CLAUDE.md", "@docs/日本語.md\n@types\n@docs/Y.mdを参照\n");
@@ -334,28 +398,53 @@ describe("import-budget path resolution", () => {
     expect(fileCount(summary(findings))).toBe(1);
   });
 
-  it.skipIf(!CAN_SYMLINK)("does not follow a symlink that points outside the root", async () => {
-    const root = fixture("gs-ib-symlink");
-    const outsideDir = fixture("gs-ib-symlink-target");
-    write(outsideDir, "secret.md", "SECRET-OUTSIDE");
-    write(root, "CLAUDE.md", "@link.md\n");
-    symlinkSync(join(outsideDir, "secret.md"), join(root, "link.md"), "file");
-    const findings = await lint(root);
-    const outside = findings.filter((f) => f.message.includes("outside root, not measured"));
-    expect(outside).toHaveLength(1);
-    expect(outside[0].severity).toBe("info");
-    expect(fileCount(summary(findings))).toBe(1);
-    expect(summary(findings).message).not.toContain("SECRET-OUTSIDE");
-  });
+  // ディレクトリ junction は Windows でも権限不要なので、リンク経由の検証はこちらで行う
+  it.skipIf(!CAN_JUNCTION)(
+    "does not follow a directory link pointing outside the root",
+    async () => {
+      const root = fixture("gs-ib-junction-out");
+      const outsideDir = fixture("gs-ib-junction-target");
+      write(outsideDir, "secret.md", "SECRET-OUTSIDE");
+      write(root, "CLAUDE.md", "@link/secret.md\n");
+      symlinkSync(outsideDir, join(root, "link"), "junction");
+      const findings = await lint(root);
+      const outside = findings.filter((f) => f.message.includes("outside root, not measured"));
+      expect(outside).toHaveLength(1);
+      expect(outside[0].severity).toBe("info");
+      expect(fileCount(summary(findings))).toBe(1);
+      expect(summary(findings).message).not.toContain("SECRET-OUTSIDE");
+    },
+  );
 
-  it.skipIf(!CAN_SYMLINK)("follows a symlink that stays inside the root", async () => {
-    const root = fixture("gs-ib-symlink-in");
+  it.skipIf(!CAN_JUNCTION)("follows a directory link that stays inside the root", async () => {
+    const root = fixture("gs-ib-junction-in");
     write(root, "docs/real.md", "INSIDE");
-    write(root, "CLAUDE.md", "@link.md\n");
-    symlinkSync(join(root, "docs/real.md"), join(root, "link.md"), "file");
+    write(root, "CLAUDE.md", "@link/real.md\n");
+    symlinkSync(join(root, "docs"), join(root, "link"), "junction");
     const s = summary(await lint(root));
     expect(fileCount(s)).toBe(2);
-    expect(totalChars(s)).toBe(9 + 6);
+    expect(totalChars(s)).toBe(14 + 6);
+  });
+
+  it.skipIf(!CAN_JUNCTION)("counts a file reached through a link alias only once", async () => {
+    const root = fixture("gs-ib-junction-alias");
+    write(root, "docs/real.md", "INSIDE");
+    write(root, "CLAUDE.md", "@docs/real.md\n@link/real.md\n");
+    symlinkSync(join(root, "docs"), join(root, "link"), "junction");
+    const s = summary(await lint(root));
+    expect(fileCount(s)).toBe(2); // CLAUDE.md + real.md(別名でも1回)
+    expect(totalChars(s)).toBe(28 + 6);
+  });
+
+  it.skipIf(!CASE_INSENSITIVE_FS)("counts a case-variant alias only once", async () => {
+    const root = fixture("gs-ib-case");
+    write(root, "docs/a.md", "AAAAA");
+    write(root, "CLAUDE.md", "@docs/a.md\n@docs/A.MD\n");
+    const findings = await lint(root);
+    const s = summary(findings);
+    expect(fileCount(s)).toBe(2);
+    expect(totalChars(s)).toBe(22 + 5);
+    expect(findings.filter((f) => f.message.startsWith("unresolved import:"))).toHaveLength(0);
   });
 
   it("reports unresolved imports with file and line", async () => {

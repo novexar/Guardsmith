@@ -185,8 +185,10 @@ Checks operate on **files that could be committed**:
   carrying agent worktrees, `node_modules` or virtualenvs stay fast
 - `--no-gitignore` restores the full scan, to audit what is sitting in ignored files
 
-Eight of the nine checks enumerate files with globs and therefore follow `.gitignore`.
-`json-path` reads one fixed path directly and is the only exception:
+Most checks enumerate every file they inspect with globs and therefore follow
+`.gitignore` completely. Two do not: `json-path` reads one fixed path directly, and
+`import-budget` follows `.gitignore` only when picking its entry files — the `@` imports it
+then walks are explicit references and are read wherever they live:
 
 | Check           | Follows `.gitignore` | What it means for a `.gitignore`'d path                                                                              |
 | --------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------- |
