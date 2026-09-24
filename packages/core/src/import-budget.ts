@@ -19,11 +19,15 @@
  *      バッククォートで囲めば `@README` は取り込まれない
  *
  * 公式仕様に書かれておらず本実装で補った点(いずれも保守的側に倒している):
- *  - パス終端の定義: 空白・引用符・山括弧・`|`・各種括弧・`,`・`;`、および日本語ドキュメントで
- *    頻出する全角括弧・読点・句点で終端し、末尾の句読点(`.,;:!?`)は落とす
+ *  - パス終端の定義: 空白・引用符・山括弧・`|`・`*`・各種括弧・`,`・`;`、および日本語
+ *    ドキュメントで頻出する全角括弧・読点・句点で終端し、末尾の句読点(`.,;:!?`)は落とす
  *    (例: 表セルの `@vitest/coverage-v8(80%ゲート)` を丸ごとパスとして拾わない)
- *  - `@` の直前は行頭・空白・`|`(表セル)のみ有効とする。`user@example.com` のような
- *    メールアドレスを誤ってインポートと解釈しないため
+ *  - `@` の直前は「メールアドレスのローカル部でないこと」で判定する(後読み)。日本語では
+ *    `詳細は@docs/X.md` のように `@` の前に空白が無いのが普通で、空白必須にすると過小計上で
+ *    check が実質無効になるため。`user@example.com` は従来どおり除外される
+ *  - 解決できない参照のうち「パス形状でない」もの(`/` も `.` も含まない、または末尾が
+ *    非 ASCII = 日本語の助詞等が続いている)は unresolved の info を出さない。終端文字集合を
+ *    完璧にする代わりの措置で、`@docs/日本語.md`(末尾は ASCII の `.md`)は壊さない
  *  - セキュリティ: root(走査ルート)の外に解決される参照は **読みに行かない**。二重の防御で
  *    封じ込め、いずれも info「outside root, not measured」として報告するに留める:
  *      1. 文字列レベル: `..` での脱出・絶対パス・`~` 始まり・`\` を含む参照を弾く
@@ -61,14 +65,32 @@ export interface ImportRef {
 const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
 
 /**
- * 行頭・空白・表セル区切り(`|`)の直後に現れる `@<path>`。
- * 括弧・引用符・区切り記号で終端する。全角括弧・読点・句点も終端に含めるのは、日本語
- * ドキュメントの「@pkg(補足)」を丸ごとパスとして拾わないため(全角スペースは `\s` が拾う)。
+ * `@<path>`。直前がメールアドレスのローカル部を構成する文字でなければインポートとみなす。
+ *
+ * 空白必須にしないのは、日本語ドキュメントでは `詳細は@docs/X.md` のように `@` の前に空白が
+ * 入らないのが普通で、空白必須だと大半のインポートを取りこぼし check が実質無効になるため。
+ * `user@example.com` は直前が `r` なので従来どおり除外される。
+ *
+ * 括弧・引用符・区切り記号・`*`(強調記法)で終端する。全角括弧・読点・句点も終端に含める
+ * のは、日本語ドキュメントの「@pkg(補足)」を丸ごと拾わないため(全角スペースは `\s`)。
  */
-const IMPORT = /(?:^|[\s|])@([^\s`"'<>|(){}[\],;、。「」『』（）]+)/g;
+const IMPORT = /(?<![A-Za-z0-9_.+-])@([^\s`"'<>|*(){}[\],;、。「」『』（）]+)/g;
 
 /** 末尾の句読点はパスの一部とみなさない */
 const TRAILING_PUNCT = /[.,;:!?]+$/;
+
+/** 末尾が非 ASCII(日本語の助詞などが続いている可能性が高い) */
+const NON_ASCII_TAIL = /[^ -\u007f]$/;
+
+/**
+ * unresolved として報告する価値がある「パス形状」の参照か。
+ * `@types`(区切りも拡張子も無い)や `@docs/Y.mdを参照`(助詞が付いた)は報告しない。
+ * `@docs/日本語.md` は末尾が ASCII の `.md` なので報告対象のまま。
+ */
+export function isPathShaped(ref: string): boolean {
+  if (!ref.includes("/") && !ref.includes(".")) return false;
+  return !NON_ASCII_TAIL.test(ref);
+}
 
 /**
  * Markdown から `@` インポート参照を抽出する。
@@ -106,7 +128,6 @@ function refsInLine(line: string): string[] {
   while ((m = IMPORT.exec(line)) !== null) {
     const ref = m[1].replace(TRAILING_PUNCT, "");
     if (ref.length > 0) out.push(ref);
-    // 直前の1文字を消費しているため、隣接する参照を取りこぼさないよう1つ戻す
     IMPORT.lastIndex = m.index + m[0].length;
   }
   return out;
@@ -280,11 +301,22 @@ function measureEntry(rule: ImportBudgetRule, rootReal: string, entry: string): 
   }
   const text = loaded.text;
   const sizes = new Map<string, number>([[entry, text.length]]);
+  /** そのファイルを測ったときの最小深さ。より浅い経路で再到達したら降り直す */
+  const depths = new Map<string, number>([[entry, 0]]);
   const notes: Finding[] = [];
+  /** 深さ上限で打ち切った参照。別の浅い経路で測れた場合は報告しない */
+  const overDepth: { target: string; finding: Finding }[] = [];
   const maxDepth = rule.with.max_depth ?? DEFAULT_IMPORT_MAX_DEPTH;
 
+  const info = (message: string, file: string, line: number): Finding => ({
+    ruleId: rule.id,
+    severity: "info",
+    file,
+    line,
+    message,
+  });
   const note = (message: string, file: string, line: number): void => {
-    notes.push({ ruleId: rule.id, severity: "info", file, line, message });
+    notes.push(info(message, file, line));
   };
 
   const visit = (rel: string, body: string, depth: number, stack: readonly string[]): void => {
@@ -299,9 +331,20 @@ function measureEntry(rule: ImportBudgetRule, rootReal: string, entry: string): 
         note(`import cycle detected: ${ref} ${from}`, rel, line);
         continue;
       }
-      if (sizes.has(target)) continue; // 同一ファイルは1回だけ数える
-      if (depth + 1 > maxDepth) {
-        note(`import depth limit exceeded (max_depth: ${maxDepth}): ${ref} ${from}`, rel, line);
+      const childDepth = depth + 1;
+      // 同じかより浅い深さで探索済みなら打ち切る。深い経路で先に到達していた場合は
+      // 子を取りこぼしているため降り直す(深さ優先の探索順に依存しないようにする)
+      const seen = depths.get(target);
+      if (seen !== undefined && seen <= childDepth) continue;
+      if (childDepth > maxDepth) {
+        overDepth.push({
+          target,
+          finding: info(
+            `import depth limit exceeded (max_depth: ${maxDepth}): ${ref} ${from}`,
+            rel,
+            line,
+          ),
+        });
         continue;
       }
       const content = loadInsideRoot(rootReal, target);
@@ -311,14 +354,18 @@ function measureEntry(rule: ImportBudgetRule, rootReal: string, entry: string): 
         continue;
       }
       if (content.kind === "missing") {
-        note(`unresolved import: ${ref} ${from}`, rel, line);
+        // パス形状でない参照(助詞が続いた等)はノイズになるため報告しない
+        if (isPathShaped(ref)) note(`unresolved import: ${ref} ${from}`, rel, line);
         continue;
       }
-      sizes.set(target, content.text.length);
-      visit(target, content.text, depth + 1, [...stack, target]);
+      if (!sizes.has(target)) sizes.set(target, content.text.length); // 合計は1回だけ
+      depths.set(target, childDepth);
+      visit(target, content.text, childDepth, [...stack, target]);
     }
   };
   visit(entry, text, 0, [entry]);
+  // 後から浅い経路で測れたものは「深すぎる」ではないので落とす
+  notes.push(...overDepth.filter((d) => !sizes.has(d.target)).map((d) => d.finding));
 
   const total = [...sizes.values()].reduce((a, b) => a + b, 0);
   const findings: Finding[] = [

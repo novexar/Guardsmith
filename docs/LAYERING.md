@@ -79,7 +79,7 @@ exemptions:
 2. If the same id is redefined, **the later one wins** (Layer 3 > Layer 2 > Layer 1)
 3. `exemptions` are **concatenated**, not overridden (exemptions from any layer apply,
    but an expiry date is mandatory)
-4. Remote references **require tag pinning** (@vX.Y.Z) — prevents "the standards changed
+4. Remote references **require tag pinning** (`@vX.Y.Z`) — prevents "the standards changed
    without anyone noticing"
 
 ## Why this split

@@ -245,11 +245,48 @@ describe("import-budget syntax", () => {
     expect(s.message).not.toContain("docs/fence.md");
   });
 
-  it("ignores an email-like address (not preceded by whitespace)", async () => {
+  it("ignores an email address but still sees an import on the same line", async () => {
     const root = fixture("gs-ib-mail");
-    write(root, "CLAUDE.md", "contact me@example.com\n");
-    const s = summary(await lint(root));
-    expect(fileCount(s)).toBe(1);
+    write(root, "docs/a.md", "A");
+    write(root, "CLAUDE.md", "contact user@example.com\na@b.co and @docs/a.md\n");
+    const findings = await lint(root);
+    const s = summary(findings);
+    expect(fileCount(s)).toBe(2);
+    expect(s.message).toContain("docs/a.md");
+    expect(s.message).not.toContain("example.com");
+    expect(findings.some((f) => f.message.includes("b.co"))).toBe(false);
+  });
+
+  it("detects @ without a preceding space (markdown and Japanese prose)", async () => {
+    const root = fixture("gs-ib-adjacent");
+    for (const n of ["paren", "bold", "link", "ja1"]) write(root, `docs/${n}.md`, n);
+    write(
+      root,
+      "CLAUDE.md",
+      [
+        "see (@docs/paren.md) for detail",
+        "**@docs/bold.md**",
+        "[link](@docs/link.md)",
+        "詳細は@docs/ja1.md、および@docs/ja2.mdを参照",
+      ].join("\n"),
+    );
+    const findings = await lint(root);
+    const s = summary(findings);
+    expect(fileCount(s)).toBe(5); // CLAUDE.md + 4
+    for (const n of ["paren", "bold", "link", "ja1"]) {
+      expect(s.message).toContain(`docs/${n}.md`);
+    }
+    // 助詞が続いた `@docs/ja2.mdを参照` はパス形状でないため unresolved を出さない
+    expect(findings.filter((f) => f.message.startsWith("unresolved import:"))).toHaveLength(0);
+  });
+
+  it("still reports an unresolved path-shaped reference, including a non-ASCII filename", async () => {
+    const root = fixture("gs-ib-unresolved-shape");
+    write(root, "CLAUDE.md", "@docs/日本語.md\n@types\n@docs/Y.mdを参照\n");
+    const findings = await lint(root);
+    const unresolved = findings.filter((f) => f.message.startsWith("unresolved import:"));
+    expect(unresolved).toHaveLength(1);
+    expect(unresolved[0].message).toContain("docs/日本語.md");
   });
 });
 
@@ -335,10 +372,11 @@ describe("import-budget path resolution", () => {
 
   it("treats a directory reference as unresolved", async () => {
     const root = fixture("gs-ib-dir");
-    write(root, "docs/a.md", "A");
-    write(root, "CLAUDE.md", "@docs\n");
+    write(root, "docs/inner/a.md", "A");
+    write(root, "CLAUDE.md", "@docs/inner\n");
     const findings = await lint(root);
-    expect(findings.some((f) => f.message.startsWith("unresolved import: docs"))).toBe(true);
+    expect(findings.some((f) => f.message.startsWith("unresolved import: docs/inner"))).toBe(true);
+    expect(fileCount(summary(findings))).toBe(1);
   });
 });
 
@@ -380,6 +418,38 @@ describe("import-budget cycles and depth", () => {
     expect(over[0].message).toContain("max_depth: 2");
     // CLAUDE.md + a.md + b.md のみ(c.md は未計測)
     expect(fileCount(summary(findings))).toBe(3);
+  });
+
+  it("re-descends when a file is reached again by a shallower path", async () => {
+    // 深い経路(a1→a2→a3→shared)を先に辿ると shared の子は上限で打ち切られるが、
+    // shallow 経由なら shared は 2 hop・child は 3 hop なので Claude Code は読み込む
+    const root = fixture("gs-ib-shallower");
+    write(root, "CLAUDE.md", "@a1.md\n@shallow.md\n");
+    write(root, "a1.md", "@a2.md");
+    write(root, "a2.md", "@a3.md");
+    write(root, "a3.md", "@shared.md");
+    write(root, "shallow.md", "@shared.md");
+    write(root, "shared.md", "@child.md");
+    write(root, "child.md", "C".repeat(9999));
+
+    const findings = await lint(root);
+    const s = summary(findings);
+    expect(s.message).toContain("child.md: 9999 chars");
+    expect(fileCount(s)).toBe(7); // CLAUDE.md, a1..a3, shallow, shared, child
+    expect(totalChars(s)).toBeGreaterThan(9999);
+    // 浅い経路で測れたので「深すぎる」報告は残らない
+    expect(findings.some((f) => f.message.includes("import depth limit"))).toBe(false);
+  });
+
+  it("still counts a shared file only once when reached twice", async () => {
+    const root = fixture("gs-ib-shared-once");
+    write(root, "CLAUDE.md", "@x.md\n@y.md\n");
+    write(root, "x.md", "@shared.md");
+    write(root, "y.md", "@shared.md");
+    write(root, "shared.md", "S".repeat(10));
+    const s = summary(await lint(root));
+    expect(fileCount(s)).toBe(4);
+    expect(totalChars(s)).toBe(12 + 10 + 10 + 10);
   });
 
   it("defaults max_depth to the documented 4 hops", async () => {

@@ -47,7 +47,7 @@ main                     ← リリースライン。タグ vX.Y.Z で配布(リ
 
 - **standards/ は配布マスター**: プレースホルダ(二重波括弧)や `gen:` コメントを含むのが正。整形・検査の対象外(.prettierignore / eslint ignores / self.yaml の設計を壊さない)
 - **baseline.yaml とテンプレートの同期**: presets/baseline.yaml のルール変更時は standards/ テンプレートとテストフィクスチャを必ず同期させる
-- **タグ固定必須**: リモート参照(`github:`)はタグ固定(@vX.Y.Z)。この制約を緩めない
+- **タグ固定必須**: リモート参照(`github:`)はタグ固定(`@vX.Y.Z`)。この制約を緩めない
 - **セキュリティ**: tarball展開等のリモート取得コードはパストラバーサル対策テストを必須とする
 - **exemptions は期限必須**: 期限切れ例外が error として表面化する設計を壊さない
 - **迷う仕様判断**: docs/decisions-needed.md に選択肢+推奨を記録して人間に確認する
