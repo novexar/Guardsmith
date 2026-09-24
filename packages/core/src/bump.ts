@@ -11,7 +11,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { buildDrift3Sources, Drift3PolicyError, loadPolicyWithMeta } from "./resolver.js";
 import { writeAtomically } from "./atomic.js";
-import { formatPlan, planSync, syncWrites } from "./sync.js";
+import { formatPlan, planSync, syncWrites, type SyncPlan } from "./sync.js";
 import {
   applySync3,
   formatDowngrade,
@@ -19,6 +19,7 @@ import {
   planSync3,
   sync3Writes,
   varsBlockingWrite,
+  type Sync3Plan,
 } from "./sync3.js";
 import { loadVars, TAG_RE, VARS_FILENAME } from "./vars.js";
 import type { RemoteOptions } from "./remote.js";
@@ -69,13 +70,26 @@ export interface BumpOptions extends RemoteOptions {
   conflictMarkers?: boolean;
   /** 基準タグの方が新しい(= 標準を巻き戻す)状態でも適用する */
   allowDowngrade?: boolean;
+  /**
+   * 計画だけを表示し、1 バイトも書かない。
+   *
+   * `guard sync` の dry-run は **現在の policy タグ**(= vars の standards)を基準に
+   * するため、「新タグへ上げたら何が変わるか」は見えない。上げる前に予見できるのは
+   * この dry-run だけなので、追随手順の 1 段目として案内している。
+   */
+  dryRun?: boolean;
 }
 
-/** 0 = 適用完了 / 1 = 衝突あり(policy も vars も未変更) / 2 = 実行エラー */
+/** 0 = 適用完了(dry-run では適用可能)/ 1 = 衝突あり(policy も vars も未変更)/ 2 = 実行エラー */
 export async function runBump(opts: BumpOptions): Promise<number> {
   const { tag, rootDir, policyFile } = opts;
   if (!TAG_RE.test(tag)) {
     console.error(`invalid tag '${tag}' — remote references must pin a tag: vX.Y.Z`);
+    return 2;
+  }
+  // dry-run は書かないのが唯一の約束。マーカー書き出しと同時には指定させない
+  if (opts.dryRun === true && opts.conflictMarkers === true) {
+    console.error("usage: guard bump <tag> --dry-run cannot be combined with --conflict-markers");
     return 2;
   }
   const slug = /^([\w.-]+)\/([\w.-]+)$/.exec(opts.repo);
@@ -148,7 +162,15 @@ export async function runBump(opts: BumpOptions): Promise<number> {
     return 2;
   }
 
-  // ③ 衝突: 既定は 1 ファイルも書かない。--conflict-markers のときだけマーカーを書く
+  // ③ dry-run: ここから先は一切書かない。衝突の有無だけを終了コードで返す
+  if (opts.dryRun === true) {
+    return reportDryRun(plan, await planSync(policy, rootDir, { gitignore: opts.gitignore }), {
+      rewritten: rewrite.rewritten,
+      tag,
+    });
+  }
+
+  // ④ 衝突: 既定は 1 ファイルも書かない。--conflict-markers のときだけマーカーを書く
   //    (どちらの場合も policy と vars は進めない)
   if (plan.conflicted.length > 0) {
     console.log(formatSync3Plan(plan, false));
@@ -163,12 +185,12 @@ export async function runBump(opts: BumpOptions): Promise<number> {
     return 1;
   }
 
-  // ④ 節単位モード(check: drift の skills 同期)も同じコマンドで済ませる。
+  // ⑤ 節単位モード(check: drift の skills 同期)も同じコマンドで済ませる。
   //    bump 後に guard sync --write を別途要求すると、やり忘れで skills だけ旧タグのまま残る。
   //    policy は headTag 付きで読んであるので、ここで引くマスターも **新タグ** になる
   const sectionPlan = await planSync(policy, rootDir, { gitignore: opts.gitignore });
 
-  // ⑤ 3-way・節単位・vars・スタンプを **1 つの 2 相バッチ** で適用する。
+  // ⑥ 3-way・節単位・vars・スタンプを **1 つの 2 相バッチ** で適用する。
   //    全部書けるか、1 つも書かないかのどちらかにして、中間状態を作らない
   writeAtomically(rootDir, [...sync3Writes(plan, rootDir, vars), ...syncWrites(sectionPlan)]);
   // policy だけはバッチ外。--policy でリポジトリ外を指しうるうえ、ここで失敗しても
@@ -198,6 +220,31 @@ the files and ${VARS_FILENAME} are at ${tag}, but ` +
       `${merged} file(s) merged (3-way), ${sectionPlan.actions.length} file(s) restored (sections)`,
   );
   return 0;
+}
+
+/**
+ * dry-run の表示。実行時と同じ計画をそのまま出し、policy の書き換えは「予定行」として見せる。
+ * 終了コードも適用時と揃える(0 = このまま適用できる / 1 = 衝突あり)ので、CI で
+ * 「上げられるか」を先に判定できる。
+ */
+function reportDryRun(
+  plan: Readonly<Sync3Plan>,
+  sectionPlan: Readonly<SyncPlan>,
+  ref: { rewritten: readonly RewrittenRef[]; tag: string },
+): number {
+  console.log(formatSync3Plan(plan, false));
+  if (sectionPlan.actions.length > 0) console.log(formatPlan(sectionPlan, false));
+  for (const r of ref.rewritten) {
+    console.log(`POLICY   ${r.from} → ${r.to}  (${r.line})`);
+  }
+  if (plan.conflicted.length > 0) {
+    console.error(
+      `bump would abort: ${plan.conflicted.length} file(s) conflict — ` +
+        `resolve them before running \`guard bump ${ref.tag}\``,
+    );
+  }
+  console.log("dry-run (use without --dry-run to apply)");
+  return plan.conflicted.length > 0 ? 1 : 0;
 }
 
 function lineAt(text: string, offset: number): string {

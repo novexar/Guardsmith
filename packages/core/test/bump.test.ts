@@ -9,6 +9,7 @@ import { join, relative } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { main } from "../src/cli.js";
 import { rewriteExtendsTag, runBump } from "../src/bump.js";
+import { TMP_SUFFIX } from "../src/atomic.js";
 import { normalizeMaster, stampFor } from "../src/normalize.js";
 import { parsePolicy } from "../src/schema.js";
 import { loadVars, writeVars, type VarsDocument } from "../src/vars.js";
@@ -377,5 +378,101 @@ rules:
     expect(readFileSync(join(dest, "CLAUDE.md"), "utf8")).toContain(
       "<!-- standards: novexar/guardsmith v0.8.0 -->",
     );
+  });
+});
+
+/* ---------------- guard bump --dry-run ---------------- */
+
+/**
+ * 移行ガイドが案内する「上げる前の予見」。`guard sync` の dry-run は **現在の** policy タグを
+ * 基準にするため、新タグへ上げたときの差分は見えない。bump の dry-run だけが予見できる。
+ *
+ * 不変条件は bump 本体と同じで、作業ツリーを 1 バイトも変えないこと(tmp も残さない)。
+ */
+describe("runBump --dry-run", () => {
+  function quietLog() {
+    return vi.spyOn(console, "log").mockImplementation(() => undefined);
+  }
+  function joined(spy: ReturnType<typeof quietLog>): string {
+    return spy.mock.calls.map((c) => String(c[0])).join("\n");
+  }
+
+  it("衝突なし: 0 を返し、作業ツリーを一切変えない(tmp も残さない)", async () => {
+    const built = buildProject();
+    const before = snapshot(built.proj);
+    quietLog();
+
+    expect(await runBump({ ...bumpOpts(built), dryRun: true })).toBe(0);
+
+    const after = snapshot(built.proj);
+    expect(after).toEqual(before);
+    expect([...after.keys()].filter((f) => f.includes(TMP_SUFFIX))).toEqual([]);
+    expect(loadVars(built.proj)?.standards).toBe("v0.6.0");
+    expect(readFileSync(built.policyFile, "utf8")).toBe(built.policyText);
+    expect(readFileSync(join(built.proj, "CLAUDE.md"), "utf8")).not.toContain("## セキュリティ");
+  });
+
+  it("計画・policy の書き換え予定行・dry-run の案内を表示する", async () => {
+    const built = buildProject();
+    const log = quietLog();
+
+    expect(await runBump({ ...bumpOpts(built), dryRun: true })).toBe(0);
+
+    const out = joined(log);
+    expect(out).toContain("standards v0.6.0 → v0.7.0");
+    expect(out).toContain("MERGE    CLAUDE.md");
+    expect(out).toContain("MERGE    DESIGN.md");
+    expect(out).toContain("POLICY   v0.6.0 → v0.7.0");
+    expect(out).toContain("dry-run (use without --dry-run to apply)");
+  });
+
+  it("衝突あり: 1 を返し、衝突を予告したうえで何も書かない", async () => {
+    const built = buildProject({ conflict: true });
+    const before = snapshot(built.proj);
+    const log = quietLog();
+    const err = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    expect(await runBump({ ...bumpOpts(built), dryRun: true })).toBe(1);
+
+    expect(snapshot(built.proj)).toEqual(before);
+    expect(joined(log)).toContain("CONFLICT DESIGN.md");
+    expect(joined(log)).toContain("dry-run (use without --dry-run to apply)");
+    expect(err.mock.calls.map((c) => String(c[0])).join("\n")).toContain("would abort");
+  });
+
+  it("vars に TODO が残っていれば dry-run でも 2(適用時と同じ判定)", async () => {
+    const built = buildProject({ todo: true });
+    const before = snapshot(built.proj);
+    quietLog();
+    const err = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    expect(await runBump({ ...bumpOpts(built), dryRun: true })).toBe(2);
+
+    expect(snapshot(built.proj)).toEqual(before);
+    expect(err.mock.calls.map((c) => String(c[0])).join("\n")).toContain("OWNER");
+  });
+
+  it("--conflict-markers との併用は usage エラーで 2(何も書かない)", async () => {
+    const built = buildProject({ conflict: true });
+    const before = snapshot(built.proj);
+    const err = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    expect(await runBump({ ...bumpOpts(built), dryRun: true, conflictMarkers: true })).toBe(2);
+
+    expect(snapshot(built.proj)).toEqual(before);
+    expect(err.mock.calls.map((c) => String(c[0])).join("\n")).toContain("--conflict-markers");
+  });
+
+  it("CLI からも --dry-run が通り、適用時と同じ終了コードになる", async () => {
+    const built = buildProject();
+    const before = snapshot(built.proj);
+    quietLog();
+
+    expect(await main(["bump", "v0.7.0", "--root", built.proj, "--dry-run"])).toBe(0);
+    expect(snapshot(built.proj)).toEqual(before);
+
+    // 予見どおり適用できる
+    expect(await main(["bump", "v0.7.0", "--root", built.proj])).toBe(0);
+    expect(loadVars(built.proj)?.standards).toBe("v0.7.0");
   });
 });

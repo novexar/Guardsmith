@@ -4,10 +4,11 @@
  *   guard init                     # guard.policy.yaml を生成(30秒体験の入口)
  *   guard lint [--root <dir>] [--policy <file>] [--format console|sarif|json] [--out <file>] [--no-cache] [--no-gitignore]
  *   guard sync [--root <dir>] [--policy <file>] [--write] [--no-cache] [--no-gitignore] [--conflict-markers] [--init-vars] [--allow-downgrade]
- *   guard bump <tag> [--root <dir>] [--policy <file>] [--repo <owner>/<repo>] [--no-cache] [--no-gitignore] [--conflict-markers] [--allow-downgrade]
+ *   guard bump <tag> [--root <dir>] [--policy <file>] [--repo <owner>/<repo>] [--dry-run] [--no-cache] [--no-gitignore] [--conflict-markers] [--allow-downgrade]
  *   guard new <dir>                # standards/ 一式から新規PJ雛形を展開
  *   guard explain <rule-id>
  * exit code: 0 = pass / 1 = error検出(sync/bump は衝突あり)/ 2 = 実行エラー
+ *   `guard bump --dry-run` は 1 バイトも書かずに同じ判定を返す(0 = 適用可能 / 1 = 衝突あり)
  */
 import {
   cpSync,
@@ -112,7 +113,7 @@ export async function main(argv: string[]): Promise<number> {
           "  guard init\n" +
           "  guard lint [--root <dir>] [--policy <file>] [--format console|sarif|json] [--out <file>] [--no-cache] [--no-gitignore]\n" +
           "  guard sync [--root <dir>] [--policy <file>] [--write] [--no-cache] [--no-gitignore] [--conflict-markers] [--init-vars] [--allow-downgrade]\n" +
-          "  guard bump <tag> [--root <dir>] [--policy <file>] [--repo <owner>/<repo>] [--no-cache] [--no-gitignore] [--conflict-markers] [--allow-downgrade]\n" +
+          "  guard bump <tag> [--root <dir>] [--policy <file>] [--repo <owner>/<repo>] [--dry-run] [--no-cache] [--no-gitignore] [--conflict-markers] [--allow-downgrade]\n" +
           "  guard new <dir>\n" +
           "  guard explain <rule-id>",
       );
@@ -148,6 +149,8 @@ interface Flags {
   allowDowngrade: boolean;
   /** guard bump がタグを書き換える対象リポジトリ */
   repo: string;
+  /** guard bump: 計画だけを表示し 1 バイトも書かない */
+  dryRun: boolean;
 }
 
 function parseFlags(args: string[]): Flags {
@@ -162,6 +165,7 @@ function parseFlags(args: string[]): Flags {
     initVars: false,
     allowDowngrade: false,
     repo: STANDARDS_REPO,
+    dryRun: false,
   };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -176,6 +180,7 @@ function parseFlags(args: string[]): Flags {
     else if (a === "--conflict-markers") f.conflictMarkers = true;
     else if (a === "--init-vars") f.initVars = true;
     else if (a === "--allow-downgrade") f.allowDowngrade = true;
+    else if (a === "--dry-run") f.dryRun = true;
     else throw new Error(`unknown flag: ${a}`);
   }
   if (!["console", "sarif", "json"].includes(f.format))
@@ -359,7 +364,7 @@ async function syncThreeWay(
 async function bump(args: string[]): Promise<number> {
   const [tag, ...rest] = args;
   if (!tag || tag.startsWith("-")) {
-    console.error("usage: guard bump <tag> [--repo <owner>/<repo>]");
+    console.error("usage: guard bump <tag> [--repo <owner>/<repo>] [--dry-run]");
     return 2;
   }
   // lint 専用フラグを黙って無視しない(誤ったコマンドラインに気づけるように)
@@ -375,6 +380,7 @@ async function bump(args: string[]): Promise<number> {
     gitignore: !f.noGitignore,
     conflictMarkers: f.conflictMarkers,
     allowDowngrade: f.allowDowngrade,
+    dryRun: f.dryRun,
   });
 }
 

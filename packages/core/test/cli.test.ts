@@ -110,6 +110,7 @@ describe("usage", () => {
       expect(sync).toContain("--allow-downgrade");
       expect(bump).toContain("<tag>");
       expect(bump).toContain("--repo");
+      expect(bump).toContain("--dry-run");
       expect(bump).toContain("--conflict-markers");
       expect(bump).toContain("--allow-downgrade");
       expect(lines.some((l) => l.startsWith("usage:") && l.includes("bump"))).toBe(true);

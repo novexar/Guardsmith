@@ -137,6 +137,17 @@ describe("HIGH: 基準タグの方が新しいとき標準を巻き戻さない"
     expect(snapshot(proj)).toEqual(before);
   });
 
+  it("guard bump --dry-run も同じ判定で 2 を返し、計画を出さない", async () => {
+    const { proj } = buildRolledBackPolicy();
+    const before = snapshot(proj);
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    quiet();
+    expect(await main(["bump", "v0.6.0", "--root", proj, "--dry-run"])).toBe(2);
+    expect(snapshot(proj)).toEqual(before);
+    const out = log.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(out).not.toContain("standards v0.7.0 →");
+  });
+
   it("guard lint は warn で可視化する(exit 0 で黙らない)", async () => {
     const { proj, policyFile } = buildRolledBackPolicy();
     const { policy, driftOrigins } = await loadPolicyWithMeta(policyFile);
