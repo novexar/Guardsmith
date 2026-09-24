@@ -129,6 +129,14 @@ export function updateStandardsTag(
   doc: Readonly<VarsDocument>,
   tag: string,
 ): void {
+  writeFileSync(join(rootDir, VARS_FILENAME), varsTextWithTag(rootDir, doc, tag));
+}
+
+/**
+ * `standards:` だけを新タグにした vars の全文を返す(書き込みはしない)。
+ * 2 相適用のバッチに載せるため、テキスト生成と書き込みを分けている。
+ */
+export function varsTextWithTag(rootDir: string, doc: Readonly<VarsDocument>, tag: string): string {
   if (!TAG_RE.test(tag)) throw new Error(`${TAG_MESSAGE} (got '${tag}')`);
   const path = join(rootDir, VARS_FILENAME);
   // 行末コメント(` # 注記`)は値ではないので残す。置換は関数で行い、
@@ -137,14 +145,14 @@ export function updateStandardsTag(
   if (existsSync(path)) {
     const text = readFileSync(path, "utf8");
     if (re.test(text)) {
-      const next = text.replace(re, (_m, head: string, _old: string, comment?: string) => {
-        return `${head}${quote(tag)}${comment ?? ""}`;
-      });
-      writeFileSync(path, next);
-      return;
+      return text.replace(
+        re,
+        (_m, head: string, _old: string, comment?: string) =>
+          `${head}${quote(tag)}${comment ?? ""}`,
+      );
     }
   }
-  writeVars(rootDir, withStandardsTag(doc, tag));
+  return serializeVars(withStandardsTag(doc, tag));
 }
 
 /** vars → CLAUDE.md スタンプ → null の優先順で基準タグを決める */

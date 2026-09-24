@@ -34,9 +34,9 @@ existing projects, see docs/migration/v0.7.0.md.
 - `guard bump <tag> [--repo <owner>/<repo>]`: rewrites the pinned tags in
   `guard.policy.yaml` (plain text replacement — comments, indentation and key order are
   preserved), applies the standards' change through the same 3-way plan, **also runs the
-  section-level sync for `.claude/skills/**`**, and advances the `standards` tag and the
-  `CLAUDE.md` stamp — one command, nothing left to run afterwards. On a conflict it writes
-  **nothing** and exits 1
+  section-level sync for `.claude/skills/**` against the master at the new tag**, and
+  advances the `standards` tag and the `CLAUDE.md` stamp — one command, nothing left to run
+  afterwards. On a conflict it writes **nothing** and exits 1
 - New check `drift3` (`with: { source, paths }`): reports a standards change that has not
   been applied yet at the rule's severity — `standards v0.6.0 → v0.7.0 not applied
 (N files, applies cleanly) — run: guard bump v0.7.0` — and one that needs hands as `info`.
@@ -64,8 +64,9 @@ existing projects, see docs/migration/v0.7.0.md.
   keys — only writing is blocked, because an unfilled value would otherwise be written into
   the project verbatim
 - Nothing is half-applied: `guard sync --write` builds the 3-way plan first, so a conflict
-  suppresses the section-level restore as well, and every file it does write is staged and
-  renamed into place only once all of them are ready
+  suppresses the section-level restore as well, and everything a write touches — merged
+  files, section restores, `guardsmith.vars.yaml` and the `CLAUDE.md` stamp — goes out as a
+  single batch that is staged first and rolled back if committing any one file fails
 - `paths` patterns may no longer contain a `..` segment, and every write is confined to the
   project root at run time. `guard sync` writes to the paths a glob matched, and a policy
   can be inherited from a remote `extends`, so a pattern like `../**/*.md` was a way to

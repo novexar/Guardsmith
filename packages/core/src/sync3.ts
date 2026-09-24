@@ -9,13 +9,13 @@
  * 衝突時の既定は D6 に従い **1 ファイルも書かない**(部分適用で中途半端な作業ツリーを
  * 残さない)。`conflictMarkers` のときだけマーカー入りで書き、基準タグは進めない。
  */
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { containedJoin } from "./remote.js";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { projectPath, writeAtomically, type PendingWrite } from "./atomic.js";
 import { createGlobScope, globFiles, type GlobScope } from "./glob.js";
 import { detectEol, merge3, type ConflictRegion } from "./merge3.js";
 import { STAMP_RE, normalizeMaster, stampFor } from "./normalize.js";
-import { pendingVars, updateStandardsTag, VARS_FILENAME, type VarsDocument } from "./vars.js";
+import { pendingVars, varsTextWithTag, VARS_FILENAME, type VarsDocument } from "./vars.js";
 
 export type Sync3Kind =
   | "merge" // クリーンに適用できる
@@ -135,16 +135,31 @@ export function applySync3(
   rootDir: string,
   vars: Readonly<VarsDocument>,
 ): void {
-  const writable = plan.actions.filter((a) => WRITABLE.has(a.kind) && a.content !== undefined);
+  writeAtomically(rootDir, sync3Writes(plan, rootDir, vars));
+}
+
+/**
+ * 適用対象の書き込み一式(ファイル + vars の基準タグ + CLAUDE.md スタンプ)。
+ *
+ * 書き込みを直接行わず一覧で返すのは、`guard bump` が節単位モードの分と **1 つの
+ * 2 相バッチ** にまとめるため。バッチが 1 つなら「3-way だけ適用済み・skills は旧のまま」
+ * という中間状態が原理的に起きない。
+ */
+export function sync3Writes(
+  plan: Readonly<Sync3Plan>,
+  rootDir: string,
+  vars: Readonly<VarsDocument>,
+): PendingWrite[] {
+  // content 無しを空ファイルで上書きしない(呼び出し側の絞り込みが緩んでも壊れないように)
+  const files = plan.actions
+    .filter((a) => WRITABLE.has(a.kind) && a.content !== undefined)
+    .map((a) => ({ file: a.file, content: a.content as string }));
   if (plan.conflicted.length > 0) {
     // markers 指定時は衝突していないファイルも書く(指定したのに全て無変更、を避ける)。
     // ただし未解決が残る以上、基準タグとスタンプは進めない
-    if (plan.conflictMarkers) writeAll(rootDir, writable);
-    return;
+    return plan.conflictMarkers ? files : [];
   }
-  writeAll(rootDir, writable);
-  updateStandardsTag(rootDir, vars, plan.nextTag);
-  ensureStamp(rootDir, plan.nextTag);
+  return [...withStamp(files, rootDir, plan.nextTag), varsWrite(rootDir, vars, plan.nextTag)];
 }
 
 /**
@@ -336,60 +351,29 @@ async function scopeFor(cache: Map<string, GlobScope>, root: string): Promise<Gl
 
 /* ---------- 適用 ---------- */
 
-/** 一時ファイルの接尾辞。2 相適用の途中結果であることが名前で分かるようにする */
-const TMP_SUFFIX = ".guardsmith.tmp";
-
-/**
- * glob の結果を PJ ルート配下に封じ込める。
- * `paths: ["../**\/*.md"]` のようなパターンに対し fast-glob は cwd 外の相対パスを返し、
- * 素の join だとリポジトリ外へ書ける。policy は remote extends から継承されうるため、
- * スキーマ(Paths の `..` 拒否)と合わせて実行時にも必ず検査する。
- */
-function projectPath(rootDir: string, file: string): string {
-  try {
-    return containedJoin(rootDir, file);
-  } catch {
-    throw new Error(`refusing to touch '${file}': it resolves outside the project root`);
-  }
+/** vars の基準タグを進める書き込み(行単位の差し替えでコメントを保つ) */
+function varsWrite(rootDir: string, vars: Readonly<VarsDocument>, tag: string): PendingWrite {
+  return { file: VARS_FILENAME, content: varsTextWithTag(rootDir, vars, tag) };
 }
 
 /**
- * 2 相適用。全対象を一時ファイルへ書き切ってから rename で確定する。
- * 途中の I/O 失敗で「N-1 件だけ適用済み・タグは旧のまま」という状態を残さないため
- * (rename は同一ディレクトリ内であれば実質アトミック)。
+ * U3: PJ がスタンプ行を消していた場合に CLAUDE.md の末尾へ追記する fallback。
+ * 判定はバッチ内の(= マージ後の)内容に対して行う。ディスク上の旧内容で判定すると、
+ * マージでスタンプが復活したかどうかを取り違える。
  */
-function writeAll(rootDir: string, actions: readonly Sync3Action[]): void {
-  const staged: { tmp: string; final: string }[] = [];
-  try {
-    for (const action of actions) {
-      // content 無しを空ファイルで上書きしない(呼び出し側の絞り込みが緩んでも壊れないように)
-      if (action.content === undefined) continue;
-      const final = projectPath(rootDir, action.file);
-      mkdirSync(dirname(final), { recursive: true });
-      const tmp = `${final}${TMP_SUFFIX}`;
-      writeFileSync(tmp, action.content);
-      staged.push({ tmp, final });
-    }
-  } catch (e) {
-    const pending = staged.map((s) => s.final);
-    for (const s of staged) rmSync(s.tmp, { force: true });
-    throw new Error(
-      `${(e as Error).message}\nnothing was applied` +
-        (pending.length > 0 ? ` (${pending.length} staged file(s) discarded)` : ""),
-    );
-  }
-  for (const s of staged) renameSync(s.tmp, s.final);
-}
-
-/** U3: PJ がスタンプ行を消していた場合に末尾へ追記する fallback */
-function ensureStamp(rootDir: string, tag: string): void {
+function withStamp(files: PendingWrite[], rootDir: string, tag: string): PendingWrite[] {
+  const at = files.findIndex((f) => f.file === "CLAUDE.md");
   const path = join(rootDir, "CLAUDE.md");
-  if (!existsSync(path)) return;
-  const text = readFileSync(path, "utf8");
-  if (STAMP_RE.test(text)) return;
+  const text = at >= 0 ? files[at].content : existsSync(path) ? readFileSync(path, "utf8") : null;
+  if (text === null || STAMP_RE.test(text)) return files;
+
   const eol = detectEol(text);
   const head = text.endsWith("\n") ? text : `${text}${eol}`;
-  writeFileSync(path, `${head}${eol}<!-- standards: ${stampFor(tag)} -->${eol}`);
+  const stamped = {
+    file: "CLAUDE.md",
+    content: `${head}${eol}<!-- standards: ${stampFor(tag)} -->${eol}`,
+  };
+  return at < 0 ? [...files, stamped] : files.map((f, i) => (i === at ? stamped : f));
 }
 
 /* ---------- 表示 ---------- */

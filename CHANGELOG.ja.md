@@ -29,9 +29,9 @@
   1 のままで、基準タグは進めない
 - `guard bump <tag> [--repo <owner>/<repo>]`: `guard.policy.yaml` のタグ固定参照を書き換え
   (正規表現によるテキスト置換のみ。コメント・インデント・キー順は保存される)、同じ 3-way
-  計画で標準の変更を適用し、**`.claude/skills/**` の節単位同期も実行**したうえで、
-  `standards` と `CLAUDE.md` のスタンプを進める。1 コマンドで完結し、後から別手順を
-  実行する必要はない。衝突時は **1 ファイルも書かず** 1 を返す
+  計画で標準の変更を適用し、**`.claude/skills/**` の節単位同期も新タグのマスターに対して
+  実行**したうえで、`standards` と `CLAUDE.md` のスタンプを進める。1 コマンドで完結し、
+  後から別手順を実行する必要はない。衝突時は **1 ファイルも書かず** 1 を返す
 - 新 check `drift3`(`with: { source, paths }`): 未適用の標準変更を rule の severity で
   報告する(`standards v0.6.0 → v0.7.0 not applied (N files, applies cleanly) —
 run: guard bump v0.7.0`)。手作業が要るものは `info`。`guardsmith.vars.yaml` が無い場合は
@@ -56,8 +56,9 @@ run: guard bump v0.7.0`)。手作業が要るものは `info`。`guardsmith.vars
   止まる。dry-run と `guard lint` は従来どおり `info` で不足キーを名指しするだけ
   (未確定の値がそのまま PJ へ書き込まれるのを防ぐため、書き込みだけを拒否する)
 - 中途半端な適用を残さない。`guard sync --write` は先に 3-way の計画を作るため、衝突が
-  あれば節単位モードの復元も止まる。実際に書くファイルも全件を一時ファイルへ書き切って
-  から rename で確定する
+  あれば節単位モードの復元も止まる。書き込み(マージ結果・節単位の復元・
+  `guardsmith.vars.yaml`・`CLAUDE.md` スタンプ)は 1 つのバッチとして全件を一時ファイルへ
+  書き切ってから確定し、確定の途中で失敗した場合は確定済みの分も元へ戻す
 - `paths` のパターンに `..` セグメントを書けなくし、実行時も書き込み先を PJ ルート配下に
   封じ込めた。`guard sync` は glob にマッチしたパスへ書き込み、policy は remote extends から
   継承されうるため、`../**/*.md` のようなパターンはリポジトリ外への書き込み経路になっていた

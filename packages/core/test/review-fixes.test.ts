@@ -78,8 +78,12 @@ interface BuildOptions {
   todo?: string;
   /** 新マスターにのみ存在するファイルを足す(create を発生させる) */
   addNew?: boolean;
-  /** 節単位 drift ルール(skills)も持たせる */
-  skills?: boolean;
+  /**
+   * 節単位 drift ルール(skills)も持たせる。
+   * "github" はタグ別キャッシュ経由(bump のタグ解決の回帰用)、
+   * "file" はローカル参照(CLI 経由のテストで既定キャッシュに触れないようにする)。
+   */
+  skills?: "file" | "github";
   /** 同じリポジトリを指す drift3 を 2 本にする */
   duplicate?: boolean;
   /** PJ 側で標準と同じ箇所を書き換え、衝突させる */
@@ -91,12 +95,15 @@ function buildProject(opts: BuildOptions = {}): Proj {
   write(masters, "v0.6.0/standards/CLAUDE.md", MASTER_CLAUDE);
   write(masters, "v0.7.0/standards/CLAUDE.md", NEW_CLAUDE);
   if (opts.addNew === true) write(masters, "v0.7.0/standards/docs/NEW.md", MASTER_NEWDOC);
-  if (opts.skills === true) {
+  if (opts.skills !== undefined) {
+    // 旧タグと新タグで **内容を変える**ことで、bump が旧マスターを読んでいたら検出できる
+    const at = (tag: string) =>
+      opts.skills === "github" ? `cache/novexar/guardsmith/${tag}/standards` : `${tag}/standards`;
     for (const tag of ["v0.6.0", "v0.7.0"]) {
       write(
         masters,
-        `${tag}/standards/.claude/skills/start-task/SKILL.md`,
-        "intro\n## 手順\nマスターの手順\n",
+        `${at(tag)}/.claude/skills/start-task/SKILL.md`,
+        `intro\n## 手順\nマスターの手順(${tag})\n## PJ固有手順\n(ここに追記)\n`,
       );
     }
   }
@@ -111,8 +118,12 @@ function buildProject(opts: BuildOptions = {}): Proj {
     "CLAUDE.md",
     normalizeMaster(source, { vars: VARS.vars, stamp: stampFor("v0.6.0") }).text,
   );
-  if (opts.skills === true) {
-    write(proj, ".claude/skills/start-task/SKILL.md", "intro\n## 手順\nPJ が書き換えた手順\n");
+  if (opts.skills !== undefined) {
+    write(
+      proj,
+      ".claude/skills/start-task/SKILL.md",
+      "intro\n## 手順\nPJ が書き換えた手順\n## PJ固有手順\nPJ の追記は残ること\n",
+    );
   }
 
   const vars = { ...VARS, vars: { ...VARS.vars } };
@@ -137,12 +148,16 @@ function buildProject(opts: BuildOptions = {}): Proj {
       source: file:${dir}/{tag}/standards@v0.7.0
       paths: ["CLAUDE.md"]`);
   }
-  if (opts.skills === true) {
+  if (opts.skills !== undefined) {
+    const source =
+      opts.skills === "github"
+        ? "github:novexar/guardsmith//standards@v0.6.0"
+        : `file:${dir}/{tag}/standards@v0.6.0`;
     rules.push(`  - id: drift/skills-sync
     severity: warn
     check: drift
     with:
-      source: file:${dir}/v0.7.0/standards
+      source: ${source}
       paths: [".claude/skills/**"]
       allow_sections: ["## PJ固有手順"]`);
   }
@@ -170,6 +185,8 @@ function bumpOpts(p: Proj) {
     rootDir: p.proj,
     policyFile: p.policyFile,
     repo: "novexar/guardsmith",
+    // github: 参照はタグ別キャッシュから引く(ネットワークへ出ない)
+    cacheDir: join(p.masters, "cache"),
   };
 }
 
@@ -363,7 +380,7 @@ describe("H4: 途中で書き込みに失敗しても 1 件も適用しない", 
 
 describe("M1: 3-way が衝突したら節単位モードの適用も止める", () => {
   it("skills は復元されず、終了コードは 1", async () => {
-    const p = buildProject({ skills: true, conflict: true });
+    const p = buildProject({ skills: "file", conflict: true });
     const skill = join(p.proj, ".claude/skills/start-task/SKILL.md");
     const before = readFileSync(skill, "utf8");
     expect(await main(["sync", "--write", "--root", p.proj])).toBe(1);
@@ -372,26 +389,51 @@ describe("M1: 3-way が衝突したら節単位モードの適用も止める", 
   });
 
   it("衝突が無ければ節単位モードも 3-way も適用される", async () => {
-    const p = buildProject({ skills: true });
+    const p = buildProject({ skills: "file" });
     expect(await main(["sync", "--write", "--root", p.proj])).toBe(0);
+    // guard sync は policy が固定しているタグ(v0.6.0)のマスターで復元する
     expect(readFileSync(join(p.proj, ".claude/skills/start-task/SKILL.md"), "utf8")).toContain(
-      "マスターの手順",
+      "マスターの手順(v0.6.0)",
     );
     expect(readFileSync(join(p.proj, "CLAUDE.md"), "utf8")).toContain("(タグ固定)");
   });
 });
 
-describe("M2: guard bump は節単位 drift(skills)も同期する", () => {
+describe("M2: guard bump は節単位 drift(skills)も新タグのマスターで同期する", () => {
   it("1 コマンドで 3-way と節単位の両方が適用され、件数を報告する", async () => {
-    const p = buildProject({ skills: true });
+    const p = buildProject({ skills: "github" });
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     expect(await runBump(bumpOpts(p))).toBe(0);
-    expect(readFileSync(join(p.proj, ".claude/skills/start-task/SKILL.md"), "utf8")).toContain(
-      "マスターの手順",
-    );
+
+    const skill = readFileSync(join(p.proj, ".claude/skills/start-task/SKILL.md"), "utf8");
+    // 旧タグのマスターで上書きされていないこと(= policy のタグだけ進む事故の回帰)
+    expect(skill).toContain("マスターの手順(v0.7.0)");
+    expect(skill).not.toContain("マスターの手順(v0.6.0)");
+    // allow_sections の PJ 追記は保全される
+    expect(skill).toContain("PJ の追記は残ること");
+
     const out = log.mock.calls.map((c) => String(c[0])).join("\n");
     expect(out).toContain("merged (3-way)");
     expect(out).toContain("restored (sections)");
+  });
+
+  it("bump 直後に lint を回しても drift/skills-sync が再発しない", async () => {
+    const p = buildProject({ skills: "github" });
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    expect(await runBump(bumpOpts(p))).toBe(0);
+
+    // bump 後の policy は @v0.7.0 を指す。その新マスターと PJ が一致していること
+    const { policy } = await loadPolicyWithMeta(p.policyFile, {
+      cacheDir: join(p.masters, "cache"),
+    });
+    const vars = loadVars(p.proj)!;
+    const resolved = await buildDrift3Sources(policy, new Map(), vars.standards, {
+      cacheDir: join(p.masters, "cache"),
+    });
+    const res = await runLint(policy, p.proj, new Date(), {
+      drift3: { sources: new Map(resolved.sources.map((s) => [s.ruleId, s])), vars },
+    });
+    expect(res.findings.filter((f) => f.ruleId === "drift/skills-sync")).toEqual([]);
   });
 });
 

@@ -116,8 +116,10 @@ guard sync          # dry-run。差分と衝突予測を表示する(ファイ�
 guard bump v0.7.0   # 取り込み。policy の extends タグと vars の standards も更新する
 ```
 
-`guard bump` は 3-way 取り込みに加えて `.claude/skills/**` の節単位同期も行う。
-bump の後に `guard sync --write` を別途実行する必要はない。
+`guard bump` は 3-way 取り込みに加えて `.claude/skills/**` の節単位同期も **新タグの
+マスターに対して** 行う。bump の後に `guard sync --write` を別途実行する必要はない。
+書き込みは 3-way・節単位・vars・スタンプをまとめた 1 つのバッチで、途中で失敗した場合は
+確定済みの分も元へ戻る(「一部だけ新タグ」という状態を作らない)。
 
 追随するのは `--repo`(既定 `novexar/guardsmith`)が指す標準リポジトリのみ。別リポジトリを
 指す `drift3`(Layer2 のオーバーレイ等)は警告を出したうえで対象外にし、そのルール自身が

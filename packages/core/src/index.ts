@@ -7,6 +7,7 @@ export * from "./import-budget.js";
 export * from "./resolver.js";
 export * from "./remote.js";
 export * from "./sync.js";
+export * from "./atomic.js";
 export * from "./vars.js";
 export * from "./normalize.js";
 export * from "./merge3.js";

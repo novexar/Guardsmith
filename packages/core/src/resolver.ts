@@ -26,11 +26,25 @@ import {
 import { ASSET_ROOT } from "./paths.js";
 import { TAG_RE } from "./vars.js";
 
+/** guard bump / drift3 が既定で追随する配布元 */
+export const DEFAULT_STANDARDS_REPO = "novexar/guardsmith";
+
 export async function loadPolicy(
   policyPath: string,
-  opts: RemoteOptions = {},
+  opts: PolicyLoadOptions = {},
 ): Promise<PolicyDocument> {
   return (await loadPolicyWithMeta(policyPath, opts)).policy;
+}
+
+/**
+ * ポリシー読込のオプション。`headTag` / `repo` は `guard bump <tag>` 用で、
+ * 対象リポジトリの drift / drift3 source を **新タグ** で解決させる。
+ */
+export interface PolicyLoadOptions extends RemoteOptions {
+  /** 対象リポジトリの source を解決するタグ(省略時は source 自身のタグ) */
+  headTag?: string;
+  /** タグ追随の対象リポジトリ(`<owner>/<repo>`)。既定 novexar/guardsmith */
+  repo?: string;
 }
 
 /** 解決済みポリシーと、解決の過程で失われる情報(drift source の元参照)を併せて返す */
@@ -46,7 +60,7 @@ export interface PolicyWithMeta {
 /** loadPolicy と同じ解決を行い、drift source の元参照も返す */
 export async function loadPolicyWithMeta(
   policyPath: string,
-  opts: RemoteOptions = {},
+  opts: PolicyLoadOptions = {},
 ): Promise<PolicyWithMeta> {
   const abs = resolve(policyPath);
   const doc = parseFile(abs);
@@ -131,22 +145,34 @@ async function loadRef(ref: string, baseDir: string, opts: RemoteOptions): Promi
   throw new Error(`unsupported extends ref: ${ref} (use preset: / file: / github:)`);
 }
 
-/** drift / drift3 ルールの source をキャッシュ取得し file: に解決する(非破壊) */
-async function resolveDriftSources(rules: Rule[], opts: RemoteOptions): Promise<Rule[]> {
+/**
+ * drift / drift3 ルールの source をキャッシュ取得し file: に解決する(非破壊)。
+ *
+ * `opts.headTag`(= `guard bump <tag>`)が指定されたときは、**節単位の `drift` も含めて**
+ * 対象リポジトリの参照を新タグで解決する。ここを drift3 だけにすると、bump が skills を
+ * **旧マスターの内容で**上書きしてしまう(policy のタグだけ新しくなり、次の lint で
+ * drift/skills-sync が再発する)。対象外リポジトリの参照は自身の固定タグのまま。
+ */
+async function resolveDriftSources(rules: Rule[], opts: PolicyLoadOptions): Promise<Rule[]> {
   return Promise.all(
     rules.map(async (rule) => {
       if (rule.check !== "drift" && rule.check !== "drift3") return rule;
       const source = rule.with.source;
-      if (rule.check === "drift3" && source.startsWith("file:")) {
-        // ローカル開発用 file: は、自身のタグで `{tag}` を描画した先が新マスター。
+      const override = targetsRepo(source, opts.repo ?? DEFAULT_STANDARDS_REPO)
+        ? opts.headTag
+        : undefined;
+      if (source.startsWith("file:")) {
+        // ローカル開発用 file: は `{tag}` を描画した先がマスター。
         // タグを持たない参照はどのタグでも同じディレクトリなので、そのまま残す
         const local = parseLocalDriftSource(source);
-        if (local.tag === undefined) return rule;
-        return { ...rule, with: { ...rule.with, source: `file:${local.root(local.tag)}` } };
+        const tag = override ?? local.tag;
+        if (tag === undefined) return rule;
+        return { ...rule, with: { ...rule.with, source: `file:${local.root(tag)}` } };
       }
       if (!source.startsWith("github:")) return rule;
       const gh = parseGithubRef(source);
-      return { ...rule, with: { ...rule.with, source: `file:${await masterRoot(gh, opts)}` } };
+      const root = await masterRoot({ ...gh, tag: override ?? gh.tag }, opts);
+      return { ...rule, with: { ...rule.with, source: `file:${root}` } };
     }),
   );
 }
@@ -186,9 +212,6 @@ export interface Drift3Resolution {
 
 /** policy の不整合。取得失敗(ネットワーク等)と区別して即座に落とすために型を分ける */
 export class Drift3PolicyError extends Error {}
-
-/** guard bump / drift3 が既定で追随する配布元 */
-export const DEFAULT_STANDARDS_REPO = "novexar/guardsmith";
 
 /**
  * drift3 の元参照から「旧タグ / 新タグ」2 本のマスターを解決する。

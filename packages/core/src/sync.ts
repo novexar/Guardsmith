@@ -6,9 +6,9 @@
  *  - マスターに無い PJ ローカルファイルには触れない
  *  - 既定は dry-run(差分表示のみ)。--write で実書き込み
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { containedJoin } from "./remote.js";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { projectPath, writeAtomically, type PendingWrite } from "./atomic.js";
 import { createGlobScope, globFiles } from "./glob.js";
 import { normalizeEol, splitSections } from "./checks.js";
 import type { PolicyDocument } from "./schema.js";
@@ -91,26 +91,14 @@ export async function planSync(
   return { actions, localOnly };
 }
 
-/** 計画を実ファイルへ適用する */
+/** 計画を実ファイルへ適用する(sync3 と同じ 2 相適用。途中失敗で部分適用を残さない) */
 export function applySync(plan: SyncPlan, rootDir: string): void {
-  for (const a of plan.actions) {
-    const path = projectPath(rootDir, a.file);
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, a.content);
-  }
+  writeAtomically(rootDir, syncWrites(plan));
 }
 
-/**
- * glob の結果を PJ ルート配下に封じ込める(sync3.ts と同じ理由)。
- * `paths: ["../**\/*.md"]` のようなパターンに対し fast-glob は cwd 外の相対パスを返し、
- * 素の join だとリポジトリ外へ書ける。policy は remote extends から継承されうる。
- */
-function projectPath(rootDir: string, file: string): string {
-  try {
-    return containedJoin(rootDir, file);
-  } catch {
-    throw new Error(`refusing to touch '${file}': it resolves outside the project root`);
-  }
+/** 適用対象の書き込み一覧。`guard bump` が 3-way の分と 1 つのバッチにまとめる */
+export function syncWrites(plan: Readonly<SyncPlan>): PendingWrite[] {
+  return plan.actions.map((a) => ({ file: a.file, content: a.content }));
 }
 
 /** dry-run / 適用結果の表示 */

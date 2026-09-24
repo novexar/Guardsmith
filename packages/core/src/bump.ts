@@ -10,8 +10,9 @@
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { buildDrift3Sources, Drift3PolicyError, loadPolicyWithMeta } from "./resolver.js";
-import { applySync, formatPlan, planSync } from "./sync.js";
-import { applySync3, formatSync3Plan, planSync3, varsBlockingWrite } from "./sync3.js";
+import { writeAtomically } from "./atomic.js";
+import { formatPlan, planSync, syncWrites } from "./sync.js";
+import { applySync3, formatSync3Plan, planSync3, sync3Writes, varsBlockingWrite } from "./sync3.js";
 import { loadVars, TAG_RE, VARS_FILENAME } from "./vars.js";
 import type { RemoteOptions } from "./remote.js";
 
@@ -87,7 +88,13 @@ export async function runBump(opts: BumpOptions): Promise<number> {
   const rewrite = rewriteExtendsTag(policyText, slug[1], slug[2], tag);
 
   // ② 新タグのマスターを解決する(policy のタグは headTag で上書きするため、一時ファイルは要らない)
-  const { policy, driftOrigins } = await loadPolicyWithMeta(policyFile, opts);
+  // 対象リポジトリの drift / drift3 を **新タグ** で解決する。節単位モードにも効かせないと、
+  //  bump が skills を旧マスターの内容で上書きしてしまう
+  const { policy, driftOrigins } = await loadPolicyWithMeta(policyFile, {
+    ...opts,
+    headTag: tag,
+    repo: opts.repo,
+  });
   let resolved;
   try {
     resolved = await buildDrift3Sources(policy, driftOrigins, vars.standards, {
@@ -141,13 +148,15 @@ export async function runBump(opts: BumpOptions): Promise<number> {
   }
 
   // ④ 節単位モード(check: drift の skills 同期)も同じコマンドで済ませる。
-  //    bump 後に guard sync --write を別途要求すると、やり忘れで skills だけ旧タグのまま残る
+  //    bump 後に guard sync --write を別途要求すると、やり忘れで skills だけ旧タグのまま残る。
+  //    policy は headTag 付きで読んであるので、ここで引くマスターも **新タグ** になる
   const sectionPlan = await planSync(policy, rootDir, { gitignore: opts.gitignore });
 
-  // ⑤ ファイル → vars/スタンプ → policy の順に書く(policy を最後に回すのは R8)。
-  //    表示は書き終えてから行う(途中で失敗したときに「適用済み」と出さない)
-  applySync3(plan, rootDir, vars);
-  applySync(sectionPlan, rootDir);
+  // ⑤ 3-way・節単位・vars・スタンプを **1 つの 2 相バッチ** で適用する。
+  //    全部書けるか、1 つも書かないかのどちらかにして、中間状態を作らない
+  writeAtomically(rootDir, [...sync3Writes(plan, rootDir, vars), ...syncWrites(sectionPlan)]);
+  // policy だけはバッチ外。--policy でリポジトリ外を指しうるうえ、ここで失敗しても
+  // 「ファイルは新・policy は旧」= 次回 bump で再適用できる安全側に倒れる(R8)
   if (rewrite.rewritten.length > 0) writeFileSync(policyFile, rewrite.text);
   console.log(formatSync3Plan(plan, true));
   if (sectionPlan.actions.length > 0) console.log(formatPlan(sectionPlan, true));
