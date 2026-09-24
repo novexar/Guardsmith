@@ -44,13 +44,13 @@ import {
 import { loadVars, resolveBaseTag, VARS_FILENAME, writeVars, type VarsDocument } from "./vars.js";
 import type { PolicyDocument } from "./schema.js";
 
-const VERSION = "0.6.0";
+const VERSION = "0.6.1";
 
 /**
  * guard new が参照する標準(standards/ + baseline)のタグ。
  * npm パッケージ版(VERSION)とは独立に、標準の内容が変わったリリースでのみ上げる。
  */
-const STANDARDS_TAG = "0.7.0";
+const STANDARDS_TAG = "0.7.1";
 
 /** 既定の標準配布元。guard bump がタグを書き換える対象 */
 const STANDARDS_REPO = "novexar/guardsmith";

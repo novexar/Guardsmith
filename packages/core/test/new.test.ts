@@ -54,12 +54,12 @@ describe("guard new", () => {
 
     // standards バージョンコメントが guardsmith 版へ書き換わっている
     const claudeMd = readFileSync(join(dest, "CLAUDE.md"), "utf8");
-    expect(claudeMd).toContain("<!-- standards: novexar/guardsmith v0.7.0 -->");
+    expect(claudeMd).toContain("<!-- standards: novexar/guardsmith v0.7.1 -->");
     expect(claudeMd).not.toContain("standards: novexar/claude-standards");
 
     // タグ固定のリモート参照を持つ guard.policy.yaml が生成され、スキーマを通る
     const policyRaw = readFileSync(join(dest, "guard.policy.yaml"), "utf8");
-    expect(policyRaw).toContain("github:novexar/guardsmith//presets/baseline.yaml@v0.7.0");
+    expect(policyRaw).toContain("github:novexar/guardsmith//presets/baseline.yaml@v0.7.1");
     const parsed = parsePolicy(parse(policyRaw));
     expect(parsed.ok).toBe(true);
   });
@@ -81,7 +81,7 @@ describe("guard new", () => {
     const doc = loadVars(dest);
     expect(doc).not.toBeNull();
     expect(doc?.version).toBe(1);
-    expect(doc?.standards).toBe("v0.7.0");
+    expect(doc?.standards).toBe("v0.7.1");
     expect(doc?.vars).toEqual({});
     // スタンプと vars の基準タグが一致している(食い違いは警告対象)
     expect(readStampTag(readFileSync(join(dest, "CLAUDE.md"), "utf8"))).toBe(doc?.standards);

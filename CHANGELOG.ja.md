@@ -2,6 +2,33 @@
 
 [English](CHANGELOG.md) | **日本語**
 
+## v0.7.1 (2026-09-25)
+
+文書と実装のずれを直すリリース。v0.7.0 の移行ガイドと `init-project` はどちらも
+「`guard sync` で差分と衝突予測を確認してから `guard bump <tag>`」と案内していたが、
+`guard sync` が基準にするのは policy が **現在** 固定しているタグなので、そのタグどおりに
+追随済みの PJ では変更 0 件と表示される一方、`guard bump` では相応にマージが起きる。
+`guard bump <tag> --dry-run` がこの穴を埋める。新タグを解決し、本番と同じ計画を組み立て、
+何も書かない。
+
+### Added
+
+- `guard bump <tag> --dry-run`: **新タグ**のマスターを解決し、本番と同じ 3-way・節単位の
+  計画を組み立てて、衝突予測と `guard.policy.yaml` の書き換え予定行まで表示する。そのうえで
+  policy も `guardsmith.vars.yaml` もスタンプもファイルも一時ファイルも **一切書かない**。
+  終了コードは本番と同じで、クリーンに適用できるなら `0`、衝突ありで `1`、実行エラー
+  (vars の未完成・`TODO`・巻き戻し等も適用時と同じ判定)で `2`。`--conflict-markers` との
+  併用は usage エラー(`2`)
+
+### Changed
+
+- docs/migration/v0.7.0.ja.md と標準の `init-project` の追随手順を
+  `guard bump <tag> --dry-run` → `guard bump <tag>` に修正。`guard sync`(dry-run)は
+  「**現在のタグ**で未適用のものがあるかの確認」であり bump の予見にはならない、と位置づけを明記
+- リモート参照タグと生成物のスタンプを v0.7.1 へ更新(baseline の drift source /
+  `guard new` が生成する policy / docs の例 / Action の `release-tag` 既定値)
+- npm: `@guardsmith/core` / `@guardsmith/cli` 0.6.1(Action の `cli-version` 既定値も 0.6.1)
+
 ## v0.7.0 (2026-09-24)
 
 「**生成元の標準に PJ を追随させ続ける**」ためのリリース。これまではマスターとの乖離を

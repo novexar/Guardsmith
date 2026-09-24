@@ -114,7 +114,7 @@ rules:
     with:
       # マスターは guardsmith リポジトリの standards/ サブディレクトリ。
       # loadPolicy がタグのtarballを取得・キャッシュし file: に解決してから検査する
-      source: github:novexar/guardsmith//standards@v0.7.0
+      source: github:novexar/guardsmith//standards@v0.7.1
       paths: [".claude/skills/**"]
       allow_sections: ["## PJ固有手順"]
 
@@ -127,7 +127,7 @@ rules:
     description: 標準本体(CLAUDE.md / DESIGN.md / docs / agents)が旧タグのまま取り残されていないこと(3-way)
     check: drift3
     with:
-      source: github:novexar/guardsmith//standards@v0.7.0
+      source: github:novexar/guardsmith//standards@v0.7.1
       paths: ["CLAUDE.md", "DESIGN.md", "docs/**/*.md", ".claude/agents/**/*.md"]
 
   # --- CI/CD 方針 (docs/CI_CD.md: CI はローカル Docker、Actions は main push の deploy のみ) ---

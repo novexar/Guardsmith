@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.7.1
+- init-project の「マスター更新への追随」を `guard bump <tag> --dry-run` → `guard bump <tag>` に修正。
+  `guard sync`(dry-run)は現在のタグでの未適用分の確認であり、bump の予見にはならないことを明記
+- フラグ表に `guard bump <tag> --dry-run` の行(終了コードと「1 バイトも書かない」)を追加
+- policy / vars の例のタグを `@v0.7.1` へ更新
+
 ## v0.7.0
 - init-project に `guardsmith.vars.yaml`(プレースホルダ値の辞書)の記入手順を追加。
   キーは `{{...}}` の内側の文字列そのまま、値は実際に書き込んだ文字列と一致させる。秘密情報は入れない

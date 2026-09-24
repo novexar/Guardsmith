@@ -112,7 +112,7 @@ describe("baseline: 収録ルール", () => {
     expect(rule?.check).toBe("drift3");
     expect(rule?.severity).toBe("warn");
     if (rule?.check !== "drift3") throw new Error("unreachable");
-    expect(rule.with.source).toBe("github:novexar/guardsmith//standards@v0.7.0");
+    expect(rule.with.source).toBe("github:novexar/guardsmith//standards@v0.7.1");
     expect(rule.with.paths).toEqual([
       "CLAUDE.md",
       "DESIGN.md",
