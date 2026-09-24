@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/novexar/Guardsmith">GuardSmith</a> を支えるルールエンジン —
-  ポリシー検証、9 種の check、タグ固定リモート解決、SARIF 出力。
+  ポリシー検証、10 種の check、タグ固定リモート解決、標準の 3-way マージ、SARIF 出力。
 </p>
 
 <p align="center">
@@ -24,10 +24,12 @@
 
 - **ポリシースキーマ** — `guard.policy.yaml` / preset YAML の厳格な zod 検証
   (未知のキーは拒否。typo はエラーになる)
-- **9 種の check** — file-exists / file-absent / content-match / max-lines / import-budget /
-  frontmatter / json-path / drift / secret-scan。`import-budget` は `CLAUDE.md` と
+- **10 種の check** — file-exists / file-absent / content-match / max-lines / import-budget /
+  frontmatter / json-path / drift / drift3 / secret-scan。`import-budget` は `CLAUDE.md` と
   `@path` インポート先を合わせた常駐量を測る(トークン数は `chars / 4` の粗い目安。
-  詳細は [メイン README](https://github.com/novexar/Guardsmith/blob/main/README.ja.md))
+  詳細は [メイン README](https://github.com/novexar/Guardsmith/blob/main/README.ja.md))。
+  `drift3`(`with: { source, paths }`)は PJ の現行タグと `source` のタグの間の標準変更のうち、
+  まだ取り込まれていないものを報告する
 - **リモート解決** — `extends: github:owner/repo[//path]@tag`。タグ固定必須、
   ローカルキャッシュ、多段合成、循環検出、パストラバーサル対策
 - **走査範囲** — 既定で `.gitignore`(入れ子も)に追従し `.git/` を常に除外するため、
@@ -64,6 +66,24 @@ if (parsed.ok) {
 `gitignore` の既定はどちらも `true` です。`{ gitignore: false }` を渡すと全走査に戻ります
 (CLI の `--no-gitignore` 相当)。`runLint` の第3引数は exemption の期限判定に使う時刻なので、
 再現性が必要な場合は明示的に渡してください。
+
+### 標準の 3-way マージ
+
+`guard sync` / `guard bump` の内部機構もエクスポートしています:
+
+| エクスポート                                        | 概要                                                                                                                                                                                 |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `loadVars(rootDir): VarsDocument \| null`           | PJ の `guardsmith.vars.yaml`(`{ version, standards, vars }`)を読んで検証する。ファイルが無ければ `null`、壊れていれば throw                                                          |
+| `normalizeMaster(text, { vars, stamp? })`           | マスターテンプレート 1 件を「初期化済み PJ の状態」へ正規化する。CRLF→LF、`gen:` コメントと未初期化警告の除去、スタンプ書き換え、プレースホルダ描画。戻り値は `{ text, unresolved }` |
+| `merge3(ours, base, theirs, { markers?, labels? })` | 行単位の 3-way マージ。戻り値は `{ merged?, conflicts, eol, changed }`。衝突があり `markers` 未指定なら `merged` は無し。入力の EOL は復元される                                     |
+| `planSync3(sources, rootDir, vars, options?)`       | `Sync3Plan` を組み立てる(`merge` / `create` / `conflict` / `skip-deleted` / `removed` / `unchanged` の `actions` と、`localOnly`・`conflicted`・`baseTag`・`nextTag`)                |
+| `applySync3(plan, rootDir, vars)`                   | 計画を書き出し、`guardsmith.vars.yaml` と `CLAUDE.md` スタンプを `nextTag` へ進める。衝突がある計画では `conflictMarkers` 指定時を除き**何も書かない**                               |
+| `formatSync3Plan(plan, write)`                      | 計画をコンソール向けに整形する(dry-run と適用後で同じフォーマッタ)                                                                                                                   |
+
+`planSync3` には `drift3` ルール 1 本につき 1 件の `Drift3Source`
+(`{ ruleId, paths, baseRoot, headRoot, baseTag, headTag }`)を渡します。
+2 つのマスターのルートはローカルディレクトリに解決済みである必要があり、
+取得方法は呼び出し側が決めます。
 
 ## ドキュメント
 

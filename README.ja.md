@@ -32,9 +32,11 @@ GuardSmith は AI 開発標準を、ESLint がコードスタイルを扱うの�
 - **配布** — `guard new` が標準マスターから新規プロジェクトを展開
   (`CLAUDE.md`・agents・skills・docs・CI 設定・デザイン仕様)
 - **検証** — `guard lint` がポリシー(YAML)に基づき検査
-  (9 種の check。未初期化テンプレ、契約見出しの破壊、資格情報の混入、マスターからの乖離、CLAUDE.md の常駐量など)
+  (10 種の check。未初期化テンプレ、契約見出しの破壊、資格情報の混入、マスターからの乖離、CLAUDE.md の常駐量など)
 - **復元** — `guard sync` がマスターからの乖離(drift)を検出し、
   各プロジェクトが編集してよいセクションは保全したまま復元
+- **追随** — `guard bump <tag>` が新しい標準リリースを **3-way マージ**で取り込む。
+  PJ 固有の記述はそのまま残り、本当にぶつかった箇所だけが衝突として報告される
 - **CI で強制** — [GuardSmith Lint Action](https://github.com/marketplace/actions/guardsmith-lint) が
   違反 PR を落とし、サマリをコメントし、SARIF を出力
 - **多層化** — `extends: github:owner/repo[//path]@tag` で OSS baseline →
@@ -131,9 +133,71 @@ exemptions: [] # 期限付き例外(reason + approved_by + expires 必須)
 - **`preset:frontend`** — UI を持つプロジェクト向け: `DESIGN.md` の存在と具体化、
   shadcn/ui 設定、競合 UI ライブラリの混在検知
 - リモート参照は**タグ固定が必須** — 標準が知らないうちに変わることはありません。
-  自分のタイミングでタグを上げ、`guard lint` で乖離を確認し、`guard sync --write` で復元します
+  タグを上げるタイミングは自分で決められます。`guard sync` が新リリースで何が変わるかを示し、
+  `guard bump <tag>` が取り込みます
 - 3層モデル(OSS baseline → 組織 private overlay → プロジェクト)の設計は
-  [docs/LAYERING.md](docs/LAYERING.md) を参照
+  [docs/LAYERING.ja.md](docs/LAYERING.ja.md) を参照
+
+### 標準更新の取り込み
+
+新しい標準リリースは 2 コマンドで取り込みます:
+
+```bash
+guard sync          # dry-run。新リリースで何が変わり、どこがぶつかるかを表示
+guard bump v0.7.0   # 適用。extends タグも一緒に進める
+```
+
+PJ が現在乗っているタグのマスター(`guardsmith.vars.yaml` の `standards`)と新タグのマスターを
+どちらも正規化し(生成コメントの除去、PJ の置換値によるプレースホルダ描画)、
+その差分を **3-way マージ**で PJ のファイルへ適用します。旧マスターが base、
+新マスターが theirs、PJ リポジトリが ours です。PJ が自分で書いた記述はすべて残ります。
+**衝突**になるのは「PJ が書き換えた節」と「標準が変更した節」が重なった箇所だけで、
+衝突したファイルは列挙されたうえで無変更のまま残ります(黙って上書きされません)。
+`guard sync` の終了コードは、すべてクリーンに適用できるなら `0`、1 ファイルでも衝突すれば `1`、
+実行エラーは `2` です。`--conflict-markers` を付けると、衝突ファイルを
+`<<<<<<<` / `|||||||` / `=======` / `>>>>>>>` マーカー入りで書き出します(終了コードは `1` のまま)。
+
+#### `guardsmith.vars.yaml`
+
+マージにはテンプレートのプレースホルダを PJ で何に置換したかの情報が必要なため、
+その辞書を PJ ルートに置き、**コミット対象**にします:
+
+```yaml
+# guardsmith.vars.yaml
+version: 1
+standards: v0.7.0 # この PJ が現在乗っているマスタータグ
+vars:
+  PROJECT_NAME: "BizCore"
+  ORG/REPO: "novexar/bizcore"
+  "単一システム | モノレポ": "モノレポ"
+```
+
+キーは `{{ }}` の**内側の文字列そのまま**です(スラッシュ入りの `ORG/REPO` も選択式トークンも
+そのまま使います)。`guard new` が雛形を生成し、同梱の `init-project` スキルが値を埋めます。
+v0.7.0 より前に作った PJ は `guard sync --init-vars` で生成します——現行タグのマスターと PJ を
+突き合わせて値を推定し、sync は実行せずに終了します。**秘密情報は絶対に入れないでください**。
+このファイルはコミット対象であり、`--init-vars` は秘密パターンに一致した推定値を意図的に
+`TODO` へ落とします。マージが成功すると `guard bump` が `standards` を新タグへ進めます。
+
+#### `drift3`
+
+同じ比較は `guard lint` でも走ります。誰も `sync` を実行しなくても、
+未取り込みの標準リリースがあることを CI が報告します:
+
+```yaml
+- id: drift/standards-sync
+  severity: warn
+  check: drift3
+  with:
+    source: github:novexar/guardsmith//standards@v0.7.0 # 新マスター(タグ固定は必須)
+    paths: ["CLAUDE.md", "DESIGN.md", "docs/**/*.md", ".claude/agents/**/*.md"]
+```
+
+クリーンに適用できる標準変更はルールの severity(baseline では `warn`)で実行すべきコマンドと
+ともに報告され、衝突する変更は人間の判断が要るため `info` で報告されます。
+`guardsmith.vars.yaml` が無い PJ はこの方法で比較できないため、節単位比較にフォールバックし、
+`guard sync --init-vars` を案内します。既存の `drift` check(節単位・`allow_sections`)は
+無変更で、`.claude/skills/**` に引き続き使われます。
 
 ### CLAUDE.md の常駐量(import budget)
 
@@ -193,9 +257,11 @@ exemptions: [] # 期限付き例外(reason + approved_by + expires 必須)
   `node_modules`、virtualenv を抱えるリポジトリでも実行時間が伸びません
 - `--no-gitignore` で全走査に戻せます(除外されたファイルの中身を点検したいとき)
 
-大半の check は検査対象を glob で列挙するため `.gitignore` に完全に追従します。例外は 2 種で、
+大半の check は検査対象を glob で列挙するため `.gitignore` に完全に追従します。例外は 3 種で、
 `json-path` は単一の固定パスを直接読むため非追従、`import-budget` は**起点ファイルの列挙だけ**が
-追従します(そこから辿る `@` インポートは明示参照なので、`.gitignore` 対象でも読みます):
+追従します(そこから辿る `@` インポートは明示参照なので、`.gitignore` 対象でも読みます)。
+`drift3` は対象ファイルの一覧を標準マスターから取るため、`.gitignore` は
+「PJ 固有ファイル」として列挙するかどうかにだけ効きます:
 
 | check           | `.gitignore` 追従 | `.gitignore` 対象パスの扱い                                                                                               |
 | --------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------- |
@@ -206,6 +272,7 @@ exemptions: [] # 期限付き例外(reason + approved_by + expires 必須)
 | `import-budget` | 起点のみ          | 起点として列挙されない。`@` インポートで明示参照された場合は計測対象                                                      |
 | `frontmatter`   | する              | 走査対象外                                                                                                                |
 | `drift`         | する              | マスターとの比較対象外                                                                                                    |
+| `drift3`        | PJ 固有の列挙のみ | マスターが持つパスならマージ対象。`.gitignore` は PJ 固有ファイルとして列挙するかだけに効く                               |
 | `secret-scan`   | する              | 走査対象外 — `.claude/settings.local.json` 等から検出されない                                                             |
 | `json-path`     | **しない**        | 直読みのため従来どおり発火(`.claude/settings.json` を gitignore している PJ でも `security/dangerous-permissions` は効く) |
 
@@ -217,28 +284,31 @@ exemptions: [] # 期限付き例外(reason + approved_by + expires 必須)
 
 ## コマンド一覧
 
-| コマンド                  | 説明                                                                                         |
-| ------------------------- | -------------------------------------------------------------------------------------------- |
-| `guard new <dir>`         | 標準マスターから新規プロジェクトを展開                                                       |
-| `guard init`              | カレントに `guard.policy.yaml` を生成                                                        |
-| `guard lint`              | 検査。`--format sarif\|json`、`--out <file>`、`--no-cache`、`--no-gitignore`、`--root <dir>` |
-| `guard sync`              | 乖離の表示(dry-run)。`--write` で復元、`--no-gitignore` で全走査                             |
-| `guard explain <rule-id>` | ルールの意図を表示                                                                           |
-| `guard version`           | CLI と標準のバージョンを表示                                                                 |
+| コマンド                  | 説明                                                                                                                                                                                                                                                  |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `guard new <dir>`         | 標準マスターから新規プロジェクトを展開(`guardsmith.vars.yaml` の雛形も生成)                                                                                                                                                                           |
+| `guard init`              | カレントに `guard.policy.yaml` を生成                                                                                                                                                                                                                 |
+| `guard lint`              | 検査。`--format sarif\|json`、`--out <file>`、`--no-cache`、`--no-gitignore`、`--root <dir>`                                                                                                                                                          |
+| `guard sync`              | 標準更新の dry-run。`--write` で適用、`--conflict-markers` で衝突を書き出し、`--init-vars` で `guardsmith.vars.yaml` を生成、`--no-gitignore` で全走査。終了コード `0` / `1` 衝突 / `2` エラー。`drift3` ルールを持たないポリシーでは従来の節単位復元 |
+| `guard bump <tag>`        | 標準リリースを取り込む。`extends` タグの書き換え・マージ・`guardsmith.vars.yaml` と `CLAUDE.md` スタンプの更新。`--repo <owner>/<repo>`、`--conflict-markers`。終了コード `0` / `1` 衝突(何も書かない)/ `2` エラー                                    |
+| `guard explain <rule-id>` | ルールの意図を表示                                                                                                                                                                                                                                    |
+| `guard version`           | CLI と標準のバージョンを表示                                                                                                                                                                                                                          |
 
 ## 標準のアップグレード
 
 既存プロジェクトはタグ固定のため、何もしなくても壊れません。新しい標準リリースへ追随する
-際は [docs/migration/v0.6.0.ja.md](docs/migration/v0.6.0.ja.md) のチェックリストに従ってください
-——各項目は任意・独立で、段階適用できます。
+際は [docs/migration/v0.7.0.ja.md](docs/migration/v0.7.0.ja.md) のチェックリストに従ってください
+——v0.7.0 以降、追随は 2 コマンド(`guard sync` → `guard bump v0.7.0`)です。
 それより古い版からの移行は [v0.5.0](docs/migration/v0.5.0.ja.md)・
-[v0.5.1](docs/migration/v0.5.1.ja.md)・[v0.5.2](docs/migration/v0.5.2.ja.md) を先に適用して
-ください。各リリースのチェックリストは [docs/migration/](docs/migration/) にあります。
+[v0.5.1](docs/migration/v0.5.1.ja.md)・[v0.5.2](docs/migration/v0.5.2.ja.md)・
+[v0.6.0](docs/migration/v0.6.0.ja.md) を先に適用してください。
+各リリースのチェックリストは [docs/migration/](docs/migration/) にあります。
 
-> **CLI のバージョン**: v0.6.0 の baseline は `@guardsmith/cli` **0.5.0 以上**が必要です
-> (`import-budget` check を含み、旧 CLI は strict スキーマで未知の check として拒否します)。
-> `extends` タグを上げる前に CLI を上げてください。0.4.0 は npm に未公開で、同日に 0.5.0 が
-> 置き換えています。
+> **CLI のバージョン**: v0.7.0 の baseline は `@guardsmith/cli` **0.6.0 以上**が必要です
+> (`drift3` check を含み、旧 CLI は strict スキーマで未知の check として拒否します)。
+> `extends` タグを上げる前に CLI を上げてください。なお `guard sync` は v0.6.0 まで常に 0 を
+> 返していましたが、**衝突時に 1 を返す**ようになります。CI で回しているジョブを確認して
+> ください(`guard lint` の終了コードは変わりません)。
 
 ## 謝辞・クレジット
 
@@ -249,8 +319,10 @@ exemptions: [] # 期限付き例外(reason + approved_by + expires 必須)
 - 標準スタックとして参照・推奨しているエコシステムへの敬意: shadcn/ui、Tremor、
   TanStack(Router/Query/Table)、Tailwind CSS、cmdk — コードの同梱はなく、
   各 PJ が各自のライセンスで導入します
-- 主要ランタイム依存: zod、yaml、fast-glob、micromatch、ignore、jsonpath-plus、node-tar — 各パッケージの
-  ライセンスに基づき利用(オフラインバンドルには `THIRD-PARTY-NOTICES.md` を同梱)
+- 主要ランタイム依存: zod、yaml、fast-glob、micromatch、ignore、jsonpath-plus、node-tar、
+  [node-diff3](https://github.com/bhousel/node-diff3)(MIT — `guard sync` / `guard bump` の
+  3-way マージ)— 各パッケージのライセンスに基づき利用(オフラインバンドルには
+  `THIRD-PARTY-NOTICES.md` を同梱)
 
 ## ライセンス・コントリビュート
 

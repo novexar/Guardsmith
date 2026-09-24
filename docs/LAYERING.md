@@ -84,6 +84,8 @@ exemptions:
    exclusions reach every project and a project cannot silently drop them
 5. Remote references **require tag pinning** (`@vX.Y.Z`) — prevents "the standards changed
    without anyone noticing"
+6. `guardsmith.vars.yaml` belongs to each project's Layer 3 and is **never inherited** from
+   an upper layer — the substitutions it records are specific to that one project
 
 ## Why this split
 
@@ -102,14 +104,16 @@ Not only rules — templates work the same way:
 - Layer 2: place organization-specific templates (e.g. an agent for client A) on the
   private side and point `guard sync` at it (the private standards are maintained as a
   copy of Layer 1 with the specific parts appended)
-- Layer 3: each project receives the distribution via `guard sync` and edits only the
-  `## PJ固有手順` section (the range allowed by drift detection)
+- Layer 3: each project receives the distribution via `guard bump`, and its own sections
+  survive the **three-way merge** — only a section the project rewrote _and_ the standards
+  changed becomes a conflict, which is reported rather than overwritten
 
 ## Operational flow
 
 1. Revise the standards → commit to Layer 1 (or 2) and cut a new tag (e.g. v0.3.0)
-2. Open PRs that bump the extends tag in each project's guard.policy.yaml
-   (future: automated by `guard bump`)
+2. In each project run `guard sync` (dry-run) and then `guard bump <tag>`: the `extends`
+   tags in guard.policy.yaml, the standards files themselves and `guardsmith.vars.yaml`
+   move to the new tag in one command. Open the result as a PR
 3. `guard lint` in CI verifies conformance to the new standards; places that cannot
    conform yet are grace-managed with time-boxed exemptions
 

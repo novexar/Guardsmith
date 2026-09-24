@@ -32,9 +32,11 @@ GuardSmith treats AI development standards the way ESLint treats code style —
 - **Distribute** — `guard new` scaffolds a new project from a standards master
   (`CLAUDE.md`, agents, skills, docs, CI setup, design spec)
 - **Verify** — `guard lint` checks any project against a YAML policy
-  (9 check types; uninitialized templates, broken contract headings, leaked credentials, drift, CLAUDE.md import budget, and more)
+  (10 check types; uninitialized templates, broken contract headings, leaked credentials, drift, CLAUDE.md import budget, and more)
 - **Repair** — `guard sync` detects drift from the master and restores it,
   while preserving the sections each project is allowed to customize
+- **Keep up** — `guard bump <tag>` takes a new standards release in as a **three-way merge**:
+  project-specific wording survives, and only a genuine collision is reported as a conflict
 - **Enforce in CI** — the [GuardSmith Lint Action](https://github.com/marketplace/actions/guardsmith-lint)
   fails violating PRs, posts a summary comment, and emits SARIF
 - **Layer** — `extends: github:owner/repo[//path]@tag` composes OSS baseline →
@@ -133,9 +135,76 @@ exemptions: [] # time-boxed waivers: reason + approved_by + expires required
 - **`preset:frontend`** — for projects with a UI: `DESIGN.md` present and concretized,
   shadcn/ui configuration, no competing UI libraries
 - Remote refs **must pin a tag** — your standards never change underneath you.
-  Bump the tag on your schedule, let `guard lint` show the drift, and `guard sync --write` repair it.
+  Bump the tag on your schedule: `guard sync` shows what a new release would change, and
+  `guard bump <tag>` takes it in
 - The 3-layer model (OSS baseline → private org overlay → project) is described in
   [docs/LAYERING.md](docs/LAYERING.md)
+
+### Absorbing a standards update
+
+A new standards release is taken in with two commands:
+
+```bash
+guard sync          # dry-run: what the new release would change, and where it collides
+guard bump v0.7.0   # apply it, and move the extends tags along with it
+```
+
+The master at the tag the project currently sits on (`standards` in
+`guardsmith.vars.yaml`) and the master at the new tag are both normalized — generation
+comments stripped, placeholders rendered with your own substitutions — and the difference
+between the two is applied to your files as a **three-way merge**: the old master is the
+base, the new master is theirs, your repository is ours. Everything the project wrote for
+itself survives. Only a place where a section _you_ rewrote and a section the _standards_
+changed overlap becomes a **conflict**, and a conflicting file is listed and left
+untouched — never silently overwritten. `guard sync` exits `0` when everything applies
+cleanly, `1` when anything conflicts and `2` on a run-time error; `--conflict-markers`
+writes the conflicting files out with `<<<<<<<` / `|||||||` / `=======` / `>>>>>>>`
+markers instead of leaving them alone (the exit code stays `1`).
+
+#### `guardsmith.vars.yaml`
+
+The merge has to know what each template placeholder became in your project, so that
+dictionary lives at the project root and is **committed**:
+
+```yaml
+# guardsmith.vars.yaml
+version: 1
+standards: v0.7.0 # the master tag this project currently sits on
+vars:
+  PROJECT_NAME: "BizCore"
+  ORG/REPO: "novexar/bizcore"
+  "単一システム | モノレポ": "モノレポ"
+```
+
+Keys are the text **inside** the `{{ }}` token, verbatim — including slashes
+(`ORG/REPO`) and choice tokens. `guard new` writes the skeleton and the bundled
+`init-project` skill fills it in; a project created before v0.7.0 generates one with
+`guard sync --init-vars`, which infers the values by lining the project up against the
+master at its current tag and then exits without syncing anything. **Never put a secret in
+it** — the file is committed, and `--init-vars` deliberately drops any inferred value that
+matches a secret pattern to `TODO`. `guard bump` moves `standards` to the new tag once the
+merge succeeds.
+
+#### `drift3`
+
+The same comparison runs during `guard lint`, so CI reports a waiting standards release
+without anyone running `sync`:
+
+```yaml
+- id: drift/standards-sync
+  severity: warn
+  check: drift3
+  with:
+    source: github:novexar/guardsmith//standards@v0.7.0 # new master (tag pinning is mandatory)
+    paths: ["CLAUDE.md", "DESIGN.md", "docs/**/*.md", ".claude/agents/**/*.md"]
+```
+
+Standards changes that would apply cleanly are reported at the rule's severity (`warn` in
+the baseline) together with the command to run; changes that would conflict are reported as
+`info`, because they need a human either way. A project with no `guardsmith.vars.yaml`
+cannot be compared this way, so the check falls back to the section-level comparison and
+points at `guard sync --init-vars`. The older `drift` check (section-level,
+`allow_sections`) is unchanged and still used for `.claude/skills/**`.
 
 ### CLAUDE.md import budget
 
@@ -199,21 +268,24 @@ Checks operate on **files that could be committed**:
 - `--no-gitignore` restores the full scan, to audit what is sitting in ignored files
 
 Most checks enumerate every file they inspect with globs and therefore follow
-`.gitignore` completely. Two do not: `json-path` reads one fixed path directly, and
+`.gitignore` completely. Three do not: `json-path` reads one fixed path directly;
 `import-budget` follows `.gitignore` only when picking its entry files — the `@` imports it
-then walks are explicit references and are read wherever they live:
+then walks are explicit references and are read wherever they live; and `drift3` takes its
+file list from the standards master, so `.gitignore` only decides which _extra_ project
+files are listed as project-local:
 
-| Check           | Follows `.gitignore` | What it means for a `.gitignore`'d path                                                                              |
-| --------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `file-exists`   | yes                  | Counts as **missing** → the rule reports it (it never reaches the repo)                                              |
-| `file-absent`   | yes                  | Counts as **absent** → no finding, even if the file is on disk                                                       |
-| `content-match` | yes                  | Not scanned (an empty match set is reported as `info`)                                                               |
-| `max-lines`     | yes                  | Not scanned                                                                                                          |
-| `import-budget` | entry files only     | Not used as an entry file; still measured when an `@` import points at it explicitly                                 |
-| `frontmatter`   | yes                  | Not scanned                                                                                                          |
-| `drift`         | yes                  | Not compared against the master                                                                                      |
-| `secret-scan`   | yes                  | Not scanned — no finding from `.claude/settings.local.json` and friends                                              |
-| `json-path`     | **no**               | Read directly, so it still fires (e.g. `security/dangerous-permissions` on a `.gitignore`'d `.claude/settings.json`) |
+| Check           | Follows `.gitignore`       | What it means for a `.gitignore`'d path                                                                              |
+| --------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `file-exists`   | yes                        | Counts as **missing** → the rule reports it (it never reaches the repo)                                              |
+| `file-absent`   | yes                        | Counts as **absent** → no finding, even if the file is on disk                                                       |
+| `content-match` | yes                        | Not scanned (an empty match set is reported as `info`)                                                               |
+| `max-lines`     | yes                        | Not scanned                                                                                                          |
+| `import-budget` | entry files only           | Not used as an entry file; still measured when an `@` import points at it explicitly                                 |
+| `frontmatter`   | yes                        | Not scanned                                                                                                          |
+| `drift`         | yes                        | Not compared against the master                                                                                      |
+| `drift3`        | project-local listing only | Still merged when the master owns the path; `.gitignore` only decides what is listed as project-local                |
+| `secret-scan`   | yes                        | Not scanned — no finding from `.claude/settings.local.json` and friends                                              |
+| `json-path`     | **no**                     | Read directly, so it still fires (e.g. `security/dangerous-permissions` on a `.gitignore`'d `.claude/settings.json`) |
 
 The two surprising ones are worth spelling out. `file-absent` on `.env` finds nothing once
 `.env` is in `.gitignore` — correct, because the rule exists to stop `.env` being committed,
@@ -223,28 +295,32 @@ audit keeps working on projects that keep `.claude/settings.json` local. Use
 
 ## Commands
 
-| Command                   | Description                                                                                    |
-| ------------------------- | ---------------------------------------------------------------------------------------------- |
-| `guard new <dir>`         | Scaffold a new project from the standards master                                               |
-| `guard init`              | Generate `guard.policy.yaml` in the current directory                                          |
-| `guard lint`              | Verify. `--format sarif\|json`, `--out <file>`, `--no-cache`, `--no-gitignore`, `--root <dir>` |
-| `guard sync`              | Show drift (dry-run); `--write` restores master content, `--no-gitignore` scans everything     |
-| `guard explain <rule-id>` | Explain a rule                                                                                 |
-| `guard version`           | Show CLI and standards versions                                                                |
+| Command                   | Description                                                                                                                                                                                                                                                       |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `guard new <dir>`         | Scaffold a new project from the standards master (writes a `guardsmith.vars.yaml` skeleton)                                                                                                                                                                       |
+| `guard init`              | Generate `guard.policy.yaml` in the current directory                                                                                                                                                                                                             |
+| `guard lint`              | Verify. `--format sarif\|json`, `--out <file>`, `--no-cache`, `--no-gitignore`, `--root <dir>`                                                                                                                                                                    |
+| `guard sync`              | Dry-run of the standards update; `--write` applies it, `--conflict-markers` writes conflicts out, `--init-vars` generates `guardsmith.vars.yaml`, `--no-gitignore`. Exit `0` / `1` conflicts / `2` error. Section-level repair for policies with no `drift3` rule |
+| `guard bump <tag>`        | Take a standards release in: rewrite the `extends` tags, merge, update `guardsmith.vars.yaml` and the `CLAUDE.md` stamp. `--repo <owner>/<repo>`, `--conflict-markers`. Exit `0` / `1` conflicts (nothing written) / `2` error                                    |
+| `guard explain <rule-id>` | Explain a rule                                                                                                                                                                                                                                                    |
+| `guard version`           | Show CLI and standards versions                                                                                                                                                                                                                                   |
 
 ## Upgrading standards
 
 Existing projects are tag-pinned and keep working untouched. When you are ready to adopt a
 new standards release, follow the step-by-step checklist in
-[docs/migration/v0.6.0.md](docs/migration/v0.6.0.md) — every step is optional and independent.
+[docs/migration/v0.7.0.md](docs/migration/v0.7.0.md) — from v0.7.0 catching up is two
+commands (`guard sync`, then `guard bump v0.7.0`).
 Coming from an older release? Apply [v0.5.0](docs/migration/v0.5.0.md),
-[v0.5.1](docs/migration/v0.5.1.md) and [v0.5.2](docs/migration/v0.5.2.md) first; every
-release's checklist lives in [docs/migration/](docs/migration/).
+[v0.5.1](docs/migration/v0.5.1.md), [v0.5.2](docs/migration/v0.5.2.md) and
+[v0.6.0](docs/migration/v0.6.0.md) first; every release's checklist lives in
+[docs/migration/](docs/migration/).
 
-> **CLI version**: the v0.6.0 baseline needs `@guardsmith/cli` **0.5.0 or newer** (it
-> carries the `import-budget` check, which an older CLI rejects as unknown under its strict
-> schema). Upgrade the CLI before bumping the `extends` tag. 0.4.0 was never published to
-> npm — 0.5.0 superseded it on the same day.
+> **CLI version**: the v0.7.0 baseline needs `@guardsmith/cli` **0.6.0 or newer** (it
+> carries the `drift3` check, which an older CLI rejects as unknown under its strict
+> schema). Upgrade the CLI before bumping the `extends` tag. Note that `guard sync` now
+> **exits 1 when there are conflicts**, where it always exited 0 up to v0.6.0 — check any
+> CI job that runs it. `guard lint` exit codes are unchanged.
 
 ## Acknowledgements
 
@@ -255,8 +331,10 @@ release's checklist lives in [docs/migration/](docs/migration/).
 - With respect to the ecosystems the standards reference and recommend: shadcn/ui, Tremor,
   TanStack (Router/Query/Table), Tailwind CSS, cmdk — no code is bundled; each project
   adopts them under their own licenses
-- Key runtime dependencies: zod, yaml, fast-glob, micromatch, ignore, jsonpath-plus, node-tar — used under
-  each package's license (the offline bundle ships with a `THIRD-PARTY-NOTICES.md`)
+- Key runtime dependencies: zod, yaml, fast-glob, micromatch, ignore, jsonpath-plus, node-tar and
+  [node-diff3](https://github.com/bhousel/node-diff3) (MIT — the three-way merge behind
+  `guard sync` / `guard bump`) — used under each package's license (the offline bundle
+  ships with a `THIRD-PARTY-NOTICES.md`)
 
 ## License & contributing
 
