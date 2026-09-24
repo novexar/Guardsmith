@@ -29,9 +29,39 @@ description: マスターテンプレートからコピーされた本リポジ�
 | `.claude/agents/*.md` | 手順1で決めた構成のみ残して具体化。**不要なエージェントはファイルごと削除** |
 | `.github/` | Issue / PR テンプレのラベル・項目を PJ に合わせ微調整(原則そのまま)。workflows/deploy.yml はデプロイ先確定まで no-op のまま(**テスト系ワークフローを追加しない**) |
 | `docker/ci/*` / `docker-compose.ci.yml` / `Makefile` | ローカル CI 構成を PJ のスタックへ具体化(FE / BE の片方しか無い PJ は不要なサービス・Dockerfile・ターゲットを削除)。具体化後に `make ci` が通ることを確認する |
+| `/guardsmith.vars.yaml` | 置換した全プレースホルダの値を記録する(下記「guardsmith.vars.yaml の記録」) |
 
 - エージェントの「作業フロー」「共通規約」「原則」など Novexar 標準と明記された節は**削除・緩和・改変禁止**(PJ 固有の追記は可)。
 - モノレポの場合、`.claude/templates/CLAUDE.system.md` は `new-system` スキルが使うため残す。単一システムなら削除してよい。
+
+#### guardsmith.vars.yaml の記録(必須)
+`guard new` は PJ ルートに `guardsmith.vars.yaml` を `standards: vX.Y.Z` + `vars: {}` の雛形で生成する。
+**インタビュー結果で置換した全プレースホルダを、キーと値の対にして記録する。**
+このファイルは以降 `guard sync` / `guard bump` がマスター更新を取り込むときの「PJ 値の辞書」になる。
+記録漏れはマスター追随の失敗に直結するため、置換と同時に書くこと。
+
+```yaml
+version: 1
+standards: v0.7.0 # 展開元のマスタータグ。CLAUDE.md 末尾スタンプと一致させる
+vars:
+  PROJECT_NAME: "BizCore"
+  OWNER: "Novexar"
+  ORG/REPO: "novexar/bizcore"
+  "単一システム | モノレポ": "モノレポ"
+  FE_STACK: "React 19 + Vite + TailwindCSS v4"
+```
+
+記録の規則:
+
+- **キーは `{{...}}` の内側の文字列をそのまま使う**。正規化・翻訳・大文字化をしない。
+  - 選択式 `{{単一システム | モノレポ}}` → `"単一システム | モノレポ": "単一システム"`
+  - スラッシュ入り `{{ORG/REPO}}` → `ORG/REPO: "novexar/bizcore"`
+- **値は init-project で実際に書き込んだ文字列と一字一句一致させる**。要約・言い換えをしない。
+- **秘密情報は絶対に入れない**(トークン / API キー / パスワード / 接続文字列 / 認証情報を含む URL)。
+  このファイルはコミット対象である。秘密が必要な箇所には環境変数名だけを書く。
+- **記録不要なもの**: 「行ごと削除」指示に従って削除した表の行のキー、および削除したファイル
+  (BE 不在時の `.claude/agents/backend-engineer.md` 等)にしか現れないキー。
+  削除した箇所は「PJ が削除した」状態として扱われるため、値を持つ必要がない。
 
 #### フロントエンド関連(FE の有無で分岐)
 - **FE がある PJ**:
@@ -66,12 +96,40 @@ description: マスターテンプレートからコピーされた本リポジ�
 - [ ] CLAUDE.md 本体が 120 行以内。**`@` インポートは `docs/CODING_STANDARDS.md` のみ**(他の文書は通常パス + 「読む条件」を添えて記載)。常駐量は `guard lint` で確認する
 - [ ] 各エージェントの Novexar 標準節が雛形から緩和されていない(目視確認)
 - [ ] 不要エージェント・不要テンプレが削除されている
+- [ ] `guardsmith.vars.yaml` の `vars` に、**削除していない全ファイルのプレースホルダが揃っている**
+      (マスター側の各ファイルから `grep -oh '{{[^}]*}}' | sort -u` でキーを洗い出し、
+      削除した行・削除したファイル由来のキーを除いた全件が vars にあることを突き合わせる)
+- [ ] `guardsmith.vars.yaml` の `standards` が CLAUDE.md 末尾スタンプのタグと一致している
+- [ ] `guardsmith.vars.yaml` に秘密情報(トークン・API キー・パスワード・接続文字列)が含まれていない
 
 1 つでも未達なら修正してから再検証。検証結果はチェックリスト形式でオーナーに報告する。
 
 ## マスター更新への追随
-マスター側の標準が更新された場合、CLAUDE.md 末尾のバージョンコメントと novexar/claude-standards の差分を確認し、
-標準節(共通規約・スキル手順)のみを取り込む。**PJ 固有の記述は上書きしない。**
+マスター側の標準が更新されたら、**手作業で差分を取り込まない**。`guard bump <tag>` を使う。
+`guardsmith.vars.yaml` を辞書として「旧マスター → 新マスター」の差分を PJ のファイルへ 3-way マージで
+適用するため、**PJ 固有の記述は上書きされない**。
+
+```
+guard sync          # dry-run。差分と衝突予測を表示する(ファイルは書かない)
+guard bump v0.7.0   # 取り込み。policy の extends タグと vars の standards も更新する
+```
+
+| コマンド | フラグ | 終了コード |
+|---|---|---|
+| `guard sync` | `--root <dir>` / `--policy <file>` / `--write` / `--no-cache` / `--no-gitignore` / `--conflict-markers` / `--init-vars` | 0 = 衝突なし(dry-run 含む)/ 1 = 衝突あり / 2 = 実行エラー |
+| `guard bump <tag>` | `--root <dir>` / `--policy <file>` / `--repo <owner>/<repo>` / `--no-cache` / `--no-gitignore` / `--conflict-markers` | 0 = 適用完了 / 1 = 衝突あり(policy も vars も未変更)/ 2 = 実行エラー |
+
+手順:
+
+1. `guard sync`(dry-run)で差分と衝突予測を確認する。
+2. `guard bump <tag>` を実行する。衝突が無ければ policy・ファイル・vars・スタンプが一括で更新される。
+3. 衝突があると `guard bump` は **policy も vars もファイルも一切書かずに終了コード 1** で止まり、
+   衝突ファイルを列挙する。**衝突が出たファイルだけ** PM が内容を確認して解決する
+   (マーカー入りの出力が必要なら `--conflict-markers` を付けて再実行する)。
+4. 解決後に `guard sync --write` で改めて適用する。
+
+`guardsmith.vars.yaml` が無い PJ(v0.7.0 より前に初期化した PJ)は、先に `guard sync --init-vars` で
+雛形を生成し、`TODO` と曖昧候補を PM が確定させてから上記の手順に入る。
 
 ## 完了後
 最初の機能開発は Issue 起票 → `start-task` で着手する。モノレポの場合、システム追加は `new-system` を使用。
