@@ -51,9 +51,24 @@ export function merge3(
   opts: Readonly<Merge3Options> = {},
 ): Merge3Result {
   const eol = detectEol(ours);
-  const oursLines = toLines(ours);
-  const baseLines = toLines(base);
-  const theirsLines = toLines(theirs);
+  /**
+   * 末尾改行の有無は「最後の行の中身」ではなく文書全体の属性。3 者で食い違うと、
+   * 行配列の最後の空要素の差として現れ、本文とは無関係な衝突になる。
+   * 食い違うときだけ 3 者から末尾改行を外して比較し、出力は標準側(theirs)に揃える。
+   * 3 者が一致している通常のケースでは何もしない(既存の往復保存をそのまま保つ)。
+   */
+  const trailingNl = {
+    ours: endsWithNewline(ours),
+    base: endsWithNewline(base),
+    theirs: endsWithNewline(theirs),
+  };
+  const asymmetric = trailingNl.ours !== trailingNl.base || trailingNl.base !== trailingNl.theirs;
+  // 揃え方は「末尾改行あり」側に寄せる。末尾の空要素は EOF のアンカーとして働くので、
+  // 落とす向きに揃えると「PJ が末尾へ追記」と「標準が最終行を変更」が隣接して衝突する
+  const split = (text: string): string[] => (asymmetric ? padTrailingBlank(text) : toLines(text));
+  const oursLines = split(ours);
+  const baseLines = split(base);
+  const theirsLines = split(theirs);
 
   const regions = diff3Merge<string>(oursLines, baseLines, theirsLines, {
     excludeFalseConflicts: true,
@@ -72,6 +87,8 @@ export function merge3(
           label: toDiff3Label(opts.labels),
         }).result.map(String);
 
+  // 揃えた分を戻す: 末尾改行の有無は標準側(theirs)に従う
+  if (asymmetric && !trailingNl.theirs && lines.at(-1) === "") lines.pop();
   const merged = lines.join(eol);
   return { merged, conflicts, eol, changed: merged !== ours };
 }
@@ -111,6 +128,21 @@ export function detectEol(text: string): Eol {
  */
 export function toLines(text: string): string[] {
   return text.replaceAll("\r\n", "\n").split("\n");
+}
+
+/** LF 正規化後に末尾改行で終わるか(空文字列は「終わらない」) */
+export function endsWithNewline(text: string): boolean {
+  return text.endsWith("\n");
+}
+
+/**
+ * 末尾改行があるものとして揃えた行配列(末尾の空要素を必ず 1 つ持つ)。
+ * 末尾改行の有無を行の内容として diff させないための前処理。
+ */
+function padTrailingBlank(text: string): string[] {
+  const lines = toLines(text);
+  if (!endsWithNewline(text)) lines.push("");
+  return lines;
 }
 
 /** 2 バッファ間の不一致チャンク(一致部分は LCS で対応付け済み) */

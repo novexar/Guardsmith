@@ -18,10 +18,14 @@ import { normalizeEol } from "./checks.js";
 /** `{{KEY}}` トークン。キーは `ORG/REPO` や `単一システム | モノレポ` のような任意文字列 */
 export const PLACEHOLDER_RE = /\{\{([^{}\r\n]+)\}\}/g;
 
-/** CLAUDE.md 末尾の standards バージョンスタンプ */
-export const STAMP_RE = /<!-- standards: novexar\/[\w-]+ v[\w.-]+ -->/;
+/**
+ * CLAUDE.md 末尾の standards バージョンスタンプ。
+ * タグは vars の `standards` と同じく `vX.Y.Z` 固定(TAG_RE と同じ形)。緩めると
+ * `v..` のような値がタグとして読み出され、マスターのパス組み立てに混入する。
+ */
+export const STAMP_RE = /<!-- standards: novexar\/[\w-]+ v\d+\.\d+\.\d+ -->/;
 /** スタンプのタグ部分をキャプチャする版 */
-export const STAMP_CAPTURE_RE = /<!-- standards: novexar\/[\w-]+ (v[\w.-]+) -->/;
+export const STAMP_CAPTURE_RE = /<!-- standards: novexar\/[\w-]+ (v\d+\.\d+\.\d+) -->/;
 
 /** スタンプに書く owner/repo。`guard new` が PJ へ書くものと一致させる */
 export const STANDARDS_STAMP_REPO = "novexar/guardsmith";
@@ -72,6 +76,12 @@ export function stripGenComments(text: string): string {
   for (;;) {
     const open = text.indexOf("<!--", scan);
     if (open < 0) break;
+    if (inCodeSpan(text, open)) {
+      // 「書式は `<!-- gen: ... -->` のように書く」の引用を開始位置に採ると、
+      // そこから次の `-->` までの **本文** を削除してしまう(standards/README.md に同型)
+      scan = open + 4;
+      continue;
+    }
     const close = findCommentClose(text, open + 4);
     if (close < 0) break; // 閉じていないコメントは本文として扱う
     const end = close + 3;
@@ -123,9 +133,12 @@ export function stripUninitializedWarning(text: string): string {
   return text.replace(UNINITIALIZED_WARNING_RE, "");
 }
 
-/** スタンプ行を指定の owner/repo + タグへ書き換える。スタンプが無ければ無変更 */
+/**
+ * スタンプ行を指定の owner/repo + タグへ書き換える。スタンプが無ければ無変更。
+ * 置換は関数で行う(文字列を渡すと `$&` などが置換パターンとして解釈される)。
+ */
 export function rewriteStamp(text: string, stamp: string): string {
-  return text.replace(STAMP_RE, `<!-- standards: ${stamp} -->`);
+  return text.replace(STAMP_RE, () => `<!-- standards: ${stamp} -->`);
 }
 
 /** `{{KEY}}` を vars で描画する。未登録キーはリテラルのまま残し unresolved に積む */
@@ -136,6 +149,9 @@ export function renderPlaceholders(
   const unresolved: string[] = [];
   const rendered = text.replace(PLACEHOLDER_RE, (token, raw: string) => {
     const key = raw.trim();
+    // `{{ }}`(空キー)は vars のキーになれない(YAML に書いても読み戻せない)。
+    // プレースホルダとして扱わず、リテラルのまま残す
+    if (key === "") return token as string;
     const value = Object.hasOwn(vars, key) ? vars[key] : undefined;
     if (value === undefined) {
       if (!unresolved.includes(key)) unresolved.push(key);
@@ -151,7 +167,7 @@ export function extractPlaceholderKeys(text: string): string[] {
   const keys: string[] = [];
   for (const m of text.matchAll(PLACEHOLDER_RE)) {
     const key = m[1].trim();
-    if (!keys.includes(key)) keys.push(key);
+    if (key !== "" && !keys.includes(key)) keys.push(key);
   }
   return keys;
 }

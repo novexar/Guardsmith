@@ -107,6 +107,43 @@ describe("merge3", () => {
   });
 });
 
+// M5: 末尾改行の有無は文書全体の属性。行の内容として diff すると本文と無関係に衝突する
+describe("末尾改行の非対称", () => {
+  const BASE = "# A\n\n標準の本文。\n";
+  const THEIRS = "# A\n\n標準の本文(更新)。\n";
+
+  it("ours だけ末尾改行が無くても衝突せず、出力は標準側に揃う", () => {
+    const ours = "# A\n\n標準の本文。"; // PJ が末尾改行を落としている
+    const res = merge3(ours, BASE, THEIRS);
+    expect(res.conflicts).toEqual([]);
+    expect(res.merged).toBe(THEIRS);
+  });
+
+  it("ours だけ末尾改行があり標準側に無い場合は標準側(改行なし)に揃う", () => {
+    const res = merge3("# A\n\n標準の本文。\n", "# A\n\n標準の本文。", "# A\n\n標準の本文(更新)。");
+    expect(res.conflicts).toEqual([]);
+    expect(res.merged).toBe("# A\n\n標準の本文(更新)。");
+  });
+
+  it("非対称でも PJ の追記は保たれる", () => {
+    const ours = "# A\n\n標準の本文。\n\nPJ の追記。"; // 末尾改行なし
+    const res = merge3(ours, BASE, THEIRS);
+    expect(res.conflicts).toEqual([]);
+    expect(res.merged).toBe("# A\n\n標準の本文(更新)。\n\nPJ の追記。\n");
+  });
+
+  it("3 者が一致していれば従来どおり末尾改行の有無を往復保存する", () => {
+    expect(merge3("a\nb", "a\nb", "a\nc").merged).toBe("a\nc");
+    expect(merge3("a\nb\n", "a\nb\n", "a\nc\n").merged).toBe("a\nc\n");
+  });
+
+  it("CRLF の ours でも非対称を解消して CRLF で出力する", () => {
+    const res = merge3("# A\r\n\r\n標準の本文。", BASE, THEIRS);
+    expect(res.conflicts).toEqual([]);
+    expect(res.merged).toBe("# A\r\n\r\n標準の本文(更新)。\r\n");
+  });
+});
+
 describe("toLines / detectEol", () => {
   it("round-trips through join", () => {
     for (const text of ["", "a", "a\n", "a\nb\n", "a\r\nb\r\n"]) {

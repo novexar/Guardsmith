@@ -1,7 +1,8 @@
 /** マスター正規化 — gen コメント除去 / 警告ブロック / スタンプ / プレースホルダ描画 */
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { normalizeEol } from "../src/checks.js";
 import { createGlobScope, globFiles } from "../src/glob.js";
 import {
   extractPlaceholderKeys,
@@ -247,6 +248,35 @@ describe("stripGenComments", () => {
   it("still closes at a --> that merely follows a closed code span", () => {
     const text = "<!-- gen: `code` -->\n# 本文\n";
     expect(stripGenComments(text)).toBe("# 本文\n");
+  });
+
+  // 回帰(レビュー H1): 開始側 `<!--` もコードスパン内なら読み飛ばす。
+  // 本文が gen コメントの書式を引用しているだけの箇所(standards/README.md:41 と同型)を
+  // コメント開始と誤認すると、そこから次のコメントまでの本文が丸ごと消える。
+  it("does not start a comment at a <!-- quoted inside a code span", () => {
+    const text = [
+      "## 設計原則",
+      "",
+      "- **gen: コメント方式**: 各雛形に生成規約(`<!-- gen: ... -->`)を同梱。完成版からは削除する",
+      "- **契約見出し**: 改名・削除禁止(`guard lint` が検証)",
+      "",
+      "<!-- gen: ここだけ消える -->",
+      "# 本文",
+      "",
+    ].join("\n");
+    const got = stripGenComments(text);
+    expect(got).toContain("- **gen: コメント方式**");
+    expect(got).toContain("- **契約見出し**");
+    expect(got).toContain("# 本文");
+    expect(got).not.toContain("ここだけ消える");
+  });
+
+  it("standards/README.md の実ファイルで本文を削らない(ゴールデン)", () => {
+    const raw = readFileSync(resolve(REPO_ROOT, "standards/README.md"), "utf8");
+    const got = stripGenComments(normalizeEol(raw));
+    expect(got).toContain("**gen: コメント方式**");
+    expect(got).toContain("**契約見出し**");
+    expect(got).toContain("**バージョン追跡**");
   });
 });
 

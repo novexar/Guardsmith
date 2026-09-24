@@ -17,6 +17,20 @@ export const VARS_FILENAME = "guardsmith.vars.yaml";
 export const TAG_RE = /^v\d+\.\d+\.\d+$/;
 const TAG_MESSAGE = "standards must pin a tag: vX.Y.Z";
 
+/**
+ * 値を決められなかったキーに入れるリテラル。
+ * これが 1 つでも残っている間、PJ へ書き込む操作(guard sync --write / guard bump)は
+ * 拒否する。`TODO` がそのまま標準テンプレートへ流し込まれるのを防ぐため。
+ */
+export const TODO_VALUE = "TODO";
+
+/** 値が未確定(TODO)のままのキー */
+export function pendingVars(doc: Readonly<VarsDocument>): string[] {
+  return Object.entries(doc.vars)
+    .filter(([, v]) => v.trim() === TODO_VALUE)
+    .map(([k]) => k);
+}
+
 export const VarsDocument = z
   .object({
     version: z.literal(1).default(1),
@@ -117,11 +131,16 @@ export function updateStandardsTag(
 ): void {
   if (!TAG_RE.test(tag)) throw new Error(`${TAG_MESSAGE} (got '${tag}')`);
   const path = join(rootDir, VARS_FILENAME);
-  const re = /^(standards:[ \t]*).*$/m;
+  // 行末コメント(` # 注記`)は値ではないので残す。置換は関数で行い、
+  // タグ文字列中の `$&` 等が置換パターンとして解釈されないようにする
+  const re = /^(standards:[ \t]*)(.*?)([ \t]+#.*)?$/m;
   if (existsSync(path)) {
     const text = readFileSync(path, "utf8");
     if (re.test(text)) {
-      writeFileSync(path, text.replace(re, `$1${quote(tag)}`));
+      const next = text.replace(re, (_m, head: string, _old: string, comment?: string) => {
+        return `${head}${quote(tag)}${comment ?? ""}`;
+      });
+      writeFileSync(path, next);
       return;
     }
   }
