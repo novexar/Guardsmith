@@ -178,7 +178,7 @@ new standards release, follow the step-by-step checklist in
 - With respect to the ecosystems the standards reference and recommend: shadcn/ui, Tremor,
   TanStack (Router/Query/Table), Tailwind CSS, cmdk — no code is bundled; each project
   adopts them under their own licenses
-- Key runtime dependencies: zod, yaml, fast-glob, ignore, jsonpath-plus, node-tar — used under
+- Key runtime dependencies: zod, yaml, fast-glob, micromatch, ignore, jsonpath-plus, node-tar — used under
   each package's license (the offline bundle ships with a `THIRD-PARTY-NOTICES.md`)
 
 ## License & contributing

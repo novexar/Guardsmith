@@ -158,18 +158,66 @@ describe("createGlobScope — pruning (traversal, not just filtering)", () => {
     expect((await globFiles(open, ["**"])).length).toBe(202);
   });
 
-  it("keeps pruning directory contents when a descendant .gitignore negates", async () => {
+  it("keeps pruning when a descendant negation cannot re-include the excluded path", async () => {
     const root = fixture({
       ".gitignore": "node_modules/\n*.log\n",
       "standards/.gitignore": "!.env.example\n",
       "CLAUDE.md": "x",
     });
     const scope = await createGlobScope(root);
-    // 「ディレクトリ配下」は深い否定に覆されないため枝刈りを続ける
+    // 否定の最終セグメント(.env.example)は node_modules / *.log のどちらとも衝突しない
     expect(scope.fgIgnore).toContain("**/node_modules/**/*");
+    // ディレクトリ限定でない行は要素そのものも枝刈りできる
+    expect(scope.fgIgnore).toContain("**/*.log");
     expect(scope.fgIgnore).toContain("**/*.log/**/*");
-    // 「要素そのもの」は再包含されうるため落とす
-    expect(scope.fgIgnore).not.toContain("**/*.log");
+  });
+
+  it("keeps pruning a directory whose descendant negation targets an inner path", async () => {
+    // ルート `out/` が除外したディレクトリの内側は再包含できない(git の規則)ため
+    // `!out/keep` は `out` と衝突しない
+    const root = fixture({
+      ".gitignore": "out/\n",
+      "deep/.gitignore": "!out/keep\n",
+      "deep/out/keep": "x",
+      "out/z.txt": "x",
+      "CLAUDE.md": "x",
+    });
+    const scope = await createGlobScope(root);
+    expect(scope.fgIgnore).toContain("**/out/**/*");
+    const hits = (await globFiles(scope, ["**"])).sort();
+    expect(hits).not.toContain("deep/out/keep");
+    expect(hits).not.toContain("out/z.txt");
+    expect(hits).toContain("CLAUDE.md");
+  });
+
+  it("does not prune a directory that a descendant .gitignore re-includes", async () => {
+    // ルート `build` を `sub/.gitignore` の `!build` が再包含する。
+    // 親ディレクトリ(sub)は除外されていないため git は sub/build 配下を追跡する
+    const root = fixture({
+      ".gitignore": "build\n",
+      "sub/.gitignore": "!build\n",
+      "build/x.txt": "x",
+      "sub/build/secret.md": "x",
+    });
+    const scope = await createGlobScope(root);
+    expect(scope.fgIgnore.some((p) => p.includes("build"))).toBe(false);
+    const hits = (await globFiles(scope, ["**"])).sort();
+    expect(hits).toContain("sub/build/secret.md");
+    expect(hits).not.toContain("build/x.txt");
+  });
+
+  it("treats two glob segments as colliding (conservative) and unescapes negations", async () => {
+    const root = fixture({
+      ".gitignore": "*.log\nbuild/\n",
+      "sub/.gitignore": "!*.log\n",
+      "deep/.gitignore": "!\\#hash\n",
+      "CLAUDE.md": "x",
+    });
+    const scope = await createGlobScope(root);
+    // 双方 glob(*.log と !*.log)は衝突扱い → 枝刈りしない
+    expect(scope.fgIgnore.some((p) => p.includes("*.log"))).toBe(false);
+    // エスケープを外した `#hash` は build と衝突しない → 枝刈りは維持
+    expect(scope.fgIgnore).toContain("**/build/**/*");
   });
 
   it("skips lines whose glob meaning differs between gitignore and fast-glob", async () => {

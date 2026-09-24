@@ -174,7 +174,7 @@ exemptions: [] # 期限付き例外(reason + approved_by + expires 必須)
 - 標準スタックとして参照・推奨しているエコシステムへの敬意: shadcn/ui、Tremor、
   TanStack(Router/Query/Table)、Tailwind CSS、cmdk — コードの同梱はなく、
   各 PJ が各自のライセンスで導入します
-- 主要ランタイム依存: zod、yaml、fast-glob、ignore、jsonpath-plus、node-tar — 各パッケージの
+- 主要ランタイム依存: zod、yaml、fast-glob、micromatch、ignore、jsonpath-plus、node-tar — 各パッケージの
   ライセンスに基づき利用(オフラインバンドルには `THIRD-PARTY-NOTICES.md` を同梱)
 
 ## ライセンス・コントリビュート

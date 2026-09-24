@@ -14,13 +14,25 @@
  *   1. git が追跡するファイルを誤って除外しない → 判定の正は ignore パッケージによる最終フィルタ
  *   2. 走査の枝刈り(速度)                       → 安全に変換できる行だけを fast-glob へ渡す
  *
- * 制約(いずれも「枝刈りしない」に倒れるだけで、除外判定の正確性は最終フィルタが担保する):
- *   - 否定行(`!`)を含む .gitignore からは枝刈りパターンを生成しない。
- *   - 深い階層の否定は浅い階層の除外を打ち消しうる(例: ルートの `*.log` を `sub/.gitignore` の
- *     `!important.log` が再包含する)。そのため「マッチした要素そのもの」を除外するパターンは、
- *     配下に否定行を持つ .gitignore があれば生成しない。一方「マッチしたディレクトリの配下」を
- *     除外するパターンは常に生成してよい — git は除外したディレクトリに降りず、
- *     『除外されたディレクトリ配下のファイルは再包含できない』ため、深い否定に覆されない。
+ * 枝刈りと否定(`!`)の関係:
+ *   深い階層の .gitignore の否定は、浅い階層の除外行を打ち消しうる。打ち消される可能性がある
+ *   行から枝刈りパターンを作ると、git が追跡するファイルを走査前に落としてしまう(最終フィルタ
+ *   では救えない)。そこで、除外行 L(ファイル F)について **F 自身と F 配下の .gitignore の
+ *   否定行 N** を集め、N が「L がマッチするパスそのものを再包含しうる」なら L から枝刈り
+ *   パターンを一切作らない。判定は最終セグメント(パスの最後の要素)の互換性で行う:
+ *     - 双方リテラル      → 完全一致で衝突
+ *     - 片方だけ glob     → micromatch.isMatch(リテラル, glob) で衝突判定
+ *     - 双方 glob         → 保守的に衝突とみなす
+ *   F より上位(ancestor)の否定は、より深い F の除外行が勝つため無視してよい。
+ *   例:
+ *     - ルート `build` + `sub/.gitignore` の `!build` → 衝突。git は sub/build を追跡するので
+ *       枝刈りしてはいけない
+ *     - ルート `out/` + `deep/.gitignore` の `!out/keep` → 非衝突(`out` ≠ `keep`)。git は
+ *       『除外されたディレクトリ配下は再包含できない』ため deep/out/keep を追跡しない
+ *     - ルート `node_modules/` + `standards/.gitignore` の `!.env.example` → 非衝突。
+ *       本リポジトリの枝刈りは維持される
+ *
+ * その他の制約(いずれも「枝刈りしない」に倒れるだけで、除外判定の正確性は最終フィルタが担保する):
  *   - `{} () \` を含む行は gitignore と fast-glob(micromatch)で意味が異なりうるため使わない。
  *   - ネストした .gitignore の探索自体もルート .gitignore 由来の枝刈りパターンで行う。
  *     git も除外済みディレクトリには降りず、その配下の .gitignore を読まないため挙動は一致する。
@@ -29,6 +41,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import fg from "fast-glob";
 import ignoreFactory from "ignore";
+import micromatch from "micromatch";
 
 /** git が追跡しないため常に除外するパス */
 export const ALWAYS_IGNORED: readonly string[] = ["**/.git/**"];
@@ -163,23 +176,33 @@ interface PrunePattern {
   readonly entry?: string;
 }
 
+/** パターンの最終セグメント(比較用) */
+interface Segment {
+  readonly text: string;
+  /** glob メタ文字を含まないか */
+  readonly literal: boolean;
+}
+
 /**
  * 枝刈りパターンを作る。
- *  - 否定行を含む .gitignore はまるごと使わない(同一ファイル内で打ち消されうる)
- *  - 配下に否定行を持つ .gitignore がある .gitignore からは `entry` を使わない
+ * 自身および配下の .gitignore の否定行に打ち消されうる行は、枝刈りに使わない。
  */
 function derivePrunePatterns(files: readonly GitignoreFile[]): string[] {
-  const hasNegation = (f: GitignoreFile) => f.lines.some((line) => line.startsWith("!"));
-  const negatedBases = files.filter(hasNegation).map((f) => f.base);
   const patterns: string[] = [];
   for (const file of files) {
-    if (hasNegation(file)) continue;
-    const shadowed = negatedBases.some((nb) => isSelfOrDescendant(nb, file.base));
+    const negations = files
+      .filter((f) => isSelfOrDescendant(f.base, file.base))
+      .flatMap((f) => f.lines.filter((line) => line.startsWith("!")))
+      .map((line) => finalSegment(line.slice(1)));
+
     for (const line of file.lines) {
+      if (line.startsWith("!")) continue;
       const p = toFastGlobIgnore(line, file.base);
       if (p === null) continue;
+      const target = finalSegment(line);
+      if (negations.some((n) => segmentsCollide(target, n))) continue;
       patterns.push(p.contents);
-      if (!shadowed && p.entry !== undefined) patterns.push(p.entry);
+      if (p.entry !== undefined) patterns.push(p.entry);
     }
   }
   return patterns;
@@ -189,6 +212,41 @@ function derivePrunePatterns(files: readonly GitignoreFile[]): string[] {
 function isSelfOrDescendant(candidate: string, ancestor: string): boolean {
   if (ancestor === "") return true;
   return candidate === ancestor || candidate.startsWith(`${ancestor}/`);
+}
+
+/** gitignore パターンの最終セグメントを取り出す(先頭 `/`・末尾 `/` は除去) */
+function finalSegment(pattern: string): Segment {
+  let body = pattern.endsWith("/") ? pattern.slice(0, -1) : pattern;
+  if (body.startsWith("/")) body = body.slice(1);
+  const idx = body.lastIndexOf("/");
+  const seg = idx < 0 ? body : body.slice(idx + 1);
+  return { text: unescapeGitignore(seg), literal: isLiteralSegment(seg) };
+}
+
+/** エスケープされていない glob メタ文字を含まないか */
+function isLiteralSegment(seg: string): boolean {
+  for (let i = 0; i < seg.length; i++) {
+    const c = seg[i];
+    if (c === "\\") {
+      i++;
+      continue;
+    }
+    if ("*?[]{}".includes(c)) return false;
+  }
+  return true;
+}
+
+/** gitignore のエスケープ(`\#` 等)を外す */
+function unescapeGitignore(seg: string): string {
+  return seg.replace(/\\(.)/g, "$1");
+}
+
+/** 除外行の最終セグメントと否定行の最終セグメントが同じパスを指しうるか(保守的判定) */
+function segmentsCollide(target: Segment, negation: Segment): boolean {
+  if (target.literal && negation.literal) return target.text === negation.text;
+  if (target.literal) return micromatch.isMatch(target.text, negation.text, { dot: true });
+  if (negation.literal) return micromatch.isMatch(negation.text, target.text, { dot: true });
+  return true; // 双方 glob は交差判定が難しいため衝突扱い(= 枝刈りしない)
 }
 
 /** .gitignore の1行を fast-glob の ignore パターンへ変換する(安全に変換できない行は null) */

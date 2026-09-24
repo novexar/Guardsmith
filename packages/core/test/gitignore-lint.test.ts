@@ -90,6 +90,34 @@ describe("guard lint × .gitignore", () => {
     expect(files).not.toContain(".claude/worktrees/agent-a/.venv/Scripts/activate");
   });
 
+  it("still scans a directory that a nested .gitignore re-includes", async () => {
+    // ルート `build` を `sub/.gitignore` の `!build` が再包含する。git は sub/build 配下を
+    // 追跡するため、枝刈りで走査対象から消してはならない
+    const R2 = makeFixtureDir("gs-ignore-neg");
+    try {
+      write(R2, ".gitignore", "build\n");
+      write(R2, "sub/.gitignore", "!build\n");
+      write(R2, "build/ignored.md", `KEY=${FAKE_SECRET}\n`);
+      write(R2, "sub/build/secret.md", `KEY=${FAKE_SECRET}\n`);
+
+      const p = policy({
+        rules: [
+          {
+            id: "security/no-secrets-in-context",
+            severity: "error",
+            check: "secret-scan",
+            with: { paths: ["**/*.md"] },
+          },
+        ],
+      } as Partial<PolicyDocument>);
+      const files = (await runLint(p, R2)).findings.map((f) => f.file);
+      expect(files).toContain("sub/build/secret.md");
+      expect(files).not.toContain("build/ignored.md");
+    } finally {
+      rmSync(R2, { recursive: true, force: true });
+    }
+  });
+
   it("treats a .gitignore'd path as non-existent for file-exists", async () => {
     const p = policy({
       rules: [

@@ -29,6 +29,7 @@
     "fast-glob": "^3.3.3",
     "ignore": "^7.0.6",
     "jsonpath-plus": "^10.4.0",
+    "micromatch": "^4.0.8",
     "tar": "^7.5.22",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"
