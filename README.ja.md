@@ -158,8 +158,10 @@ exemptions: [] # 期限付き例外(reason + approved_by + expires 必須)
 ありません**。桁を掴む用途にのみ使ってください。
 常駐量に寄与しないインポートも `info` で示します: `unresolved import:`(解決できない参照)、
 `import cycle detected:`(循環)、`import depth limit exceeded`(深さ上限超過)、
-`import outside root, not measured`(`..`・絶対パス・`~/` で走査ルート外を指す参照。
-**読みに行かず**報告だけします)。
+`import outside root, not measured`(走査ルート外を指す参照)。
+走査ルート外は**一切読みません**: `..`・絶対パス・`~/`・バックスラッシュを含む参照は
+ファイルアクセス前に弾き、読み込み直前に `realpath` でルート配下にあることを確認するため、
+ルート内から外を指すシンボリックリンクも計測せず報告だけします。
 
 インポートの意味論は
 [Claude Code の memory ドキュメント](https://code.claude.com/docs/en/memory)(2026-09-24 確認)

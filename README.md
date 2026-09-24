@@ -160,8 +160,10 @@ breakdown (largest first, top 10 plus an `others` line). **The token figure is a
 `chars / 4` estimate, not a measurement**; use it for orders of magnitude only.
 Additional `info` findings flag imports that do not contribute: `unresolved import:`,
 `import cycle detected:`, `import depth limit exceeded`, and `import outside root, not
-measured` (references reaching outside the scan root via `..`, an absolute path or `~/`
-are reported, never read).
+measured`. Nothing outside the scan root is ever read: references using `..`, an absolute
+path, `~/` or a backslash are rejected before any file access, and every file is checked
+with `realpath` against the root before it is opened, so a symlink inside the root that
+points outside is reported rather than measured.
 
 Import semantics follow
 [the Claude Code memory docs](https://code.claude.com/docs/en/memory) (checked 2026-09-24):

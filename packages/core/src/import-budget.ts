@@ -24,11 +24,17 @@
  *    (例: 表セルの `@vitest/coverage-v8(80%ゲート)` を丸ごとパスとして拾わない)
  *  - `@` の直前は行頭・空白・`|`(表セル)のみ有効とする。`user@example.com` のような
  *    メールアドレスを誤ってインポートと解釈しないため
- *  - セキュリティ: root(走査ルート)の外に解決される参照は **読みに行かない**。
- *    `..` での脱出・絶対パス・`~/` は info で「outside root, not measured」と報告する
+ *  - セキュリティ: root(走査ルート)の外に解決される参照は **読みに行かない**。二重の防御で
+ *    封じ込め、いずれも info「outside root, not measured」として報告するに留める:
+ *      1. 文字列レベル: `..` での脱出・絶対パス・`~` 始まり・`\` を含む参照を弾く
+ *         (`\` は公式仕様の区切りではないうえ、Windows の `path.win32.join` が後段で
+ *          区切りとして解釈するため `docs\..\..\secret.md` が root 外へ解決されてしまう)
+ *      2. リンクレベル: 読み込み直前に realpath を取り、root の realpath 配下にあることを
+ *         区切り付きで確認する(root 内のシンボリックリンクが外を指すケースの対策。
+ *          `root2/` を `root/` 配下と誤判定しない)
  */
-import { readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, realpathSync, statSync } from "node:fs";
+import { join, resolve, sep } from "node:path";
 import { globFiles, type GlobScope } from "./glob.js";
 import type { Rule } from "./schema.js";
 import type { Finding } from "./lint.js";
@@ -163,9 +169,13 @@ const ABSOLUTE = /^(\/|[A-Za-z]:[/\\]|\\\\)/;
 /**
  * インポート参照を root 相対の posix パスへ解決する。
  * root の外(`..` での脱出・絶対パス・`~/`)は null を返し、呼び出し側は読みに行かない。
+ *
+ * バックスラッシュを含む参照も null にする。公式仕様のパス区切りは `/` のみであり、
+ * かつ `\` をリテラル文字として通すと Windows 側の `path.win32.join` が後段で区切りとして
+ * 解釈し、`docs\..\..\secret.md` が root の外へ解決されてしまうため(保守的に不採用とする)。
  */
 export function resolveImportRef(ref: string, fromRel: string): string | null {
-  if (ref.startsWith("~") || ABSOLUTE.test(ref)) return null;
+  if (ref.startsWith("~") || ref.includes("\\") || ABSOLUTE.test(ref)) return null;
   const slash = fromRel.lastIndexOf("/");
   const dir = slash < 0 ? "" : fromRel.slice(0, slash);
   return normalizeRelative(dir === "" ? ref : `${dir}/${ref}`);
@@ -186,13 +196,52 @@ function normalizeRelative(path: string): string | null {
   return out.length === 0 ? null : out.join("/");
 }
 
-/** 通常ファイルとして読めれば本文、読めなければ null(= unresolved) */
-function readTextFile(abs: string): string | null {
+/* ---------- ファイル読み込み(root 封じ込め) ---------- */
+
+/** 読み込み結果。outside は root 外、missing は解決できない参照 */
+type Loaded =
+  | { readonly kind: "ok"; readonly text: string }
+  | { readonly kind: "outside" }
+  | { readonly kind: "missing" };
+
+const OUTSIDE: Loaded = { kind: "outside" };
+const MISSING: Loaded = { kind: "missing" };
+
+/** realpath 解決済みの root(シンボリックリンク経由の脱出を判定する基準) */
+export function realRoot(root: string): string {
+  const abs = resolve(root);
   try {
-    if (!statSync(abs).isFile()) return null;
-    return readFileSync(abs, "utf8");
+    return realpathSync(abs);
   } catch {
-    return null;
+    return abs;
+  }
+}
+
+/** abs が rootReal の配下にあるか。`root2/` を `root/` の配下と誤判定しないよう区切り付きで判定 */
+export function isInsideRoot(rootReal: string, abs: string): boolean {
+  const prefix = rootReal.endsWith(sep) ? rootReal : rootReal + sep;
+  return abs.startsWith(prefix);
+}
+
+/**
+ * root 相対パスを読み込む。二重の防御:
+ *  1. resolveImportRef が `..` / 絶対パス / `~` / `\` を弾く(文字列レベル)
+ *  2. ここで realpath を取り、root の realpath 配下にあることを確認する(リンクレベル)
+ * root 配下のシンボリックリンクが外を指していても、2 で outside として弾かれる。
+ */
+function loadInsideRoot(rootReal: string, rel: string): Loaded {
+  let real: string;
+  try {
+    real = realpathSync(join(rootReal, rel));
+  } catch {
+    return MISSING; // 存在しない = unresolved
+  }
+  if (!isInsideRoot(rootReal, real)) return OUTSIDE;
+  try {
+    if (!statSync(real).isFile()) return MISSING;
+    return { kind: "ok", text: readFileSync(real, "utf8") };
+  } catch {
+    return MISSING;
   }
 }
 
@@ -216,16 +265,20 @@ export async function checkImportBudget(
       },
     ];
   }
-  return entries.flatMap((entry) => measureEntry(rule, root, entry));
+  const rootReal = realRoot(root);
+  return entries.flatMap((entry) => measureEntry(rule, rootReal, entry));
 }
 
-function measureEntry(rule: ImportBudgetRule, root: string, entry: string): Finding[] {
-  const text = readTextFile(join(root, entry));
-  if (text === null) {
-    return [
-      { ruleId: rule.id, severity: "info", file: entry, message: `unreadable file: ${entry}` },
-    ];
+function measureEntry(rule: ImportBudgetRule, rootReal: string, entry: string): Finding[] {
+  const loaded = loadInsideRoot(rootReal, entry);
+  if (loaded.kind !== "ok") {
+    const reason =
+      loaded.kind === "outside"
+        ? `entry file resolves outside root, not measured: ${entry}`
+        : `unreadable file: ${entry}`;
+    return [{ ruleId: rule.id, severity: "info", file: entry, message: reason }];
   }
+  const text = loaded.text;
   const sizes = new Map<string, number>([[entry, text.length]]);
   const notes: Finding[] = [];
   const maxDepth = rule.with.max_depth ?? DEFAULT_IMPORT_MAX_DEPTH;
@@ -251,13 +304,18 @@ function measureEntry(rule: ImportBudgetRule, root: string, entry: string): Find
         note(`import depth limit exceeded (max_depth: ${maxDepth}): ${ref} ${from}`, rel, line);
         continue;
       }
-      const content = readTextFile(join(root, target));
-      if (content === null) {
+      const content = loadInsideRoot(rootReal, target);
+      if (content.kind === "outside") {
+        // 文字列レベルでは root 内だが、シンボリックリンクが外を指しているケース
+        note(`import outside root, not measured: ${ref} ${from}`, rel, line);
+        continue;
+      }
+      if (content.kind === "missing") {
         note(`unresolved import: ${ref} ${from}`, rel, line);
         continue;
       }
-      sizes.set(target, content.length);
-      visit(target, content, depth + 1, [...stack, target]);
+      sizes.set(target, content.text.length);
+      visit(target, content.text, depth + 1, [...stack, target]);
     }
   };
   visit(entry, text, 0, [entry]);

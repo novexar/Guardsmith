@@ -2,11 +2,17 @@
  * import-budget check の検証。
  * CLAUDE.md の `@` インポートを再帰解決し、起動時に常駐する総量を測る。
  */
-import { readFileSync, rmSync } from "node:fs";
-import { resolve } from "node:path";
+import { readFileSync, rmSync, symlinkSync } from "node:fs";
+import { join, resolve, sep } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { parse } from "yaml";
-import { extractImportRefs, maskCodeSpans, resolveImportRef } from "../src/import-budget.js";
+import {
+  extractImportRefs,
+  isInsideRoot,
+  maskCodeSpans,
+  realRoot,
+  resolveImportRef,
+} from "../src/import-budget.js";
 import { runLint, type Finding } from "../src/lint.js";
 import { parsePolicy } from "../src/schema.js";
 import { makeFixtureDir, REPO_ROOT, write } from "./helpers.js";
@@ -22,6 +28,23 @@ function fixture(prefix: string): string {
 afterAll(() => {
   for (const d of dirs) rmSync(d, { recursive: true, force: true });
 });
+
+/**
+ * シンボリックリンクを作れる環境か(Windows は開発者モード/管理者権限が要る)。
+ * 作れない環境では該当テストを skip として明示する(黙って pass させない)。
+ */
+const CAN_SYMLINK = ((): boolean => {
+  const probe = makeFixtureDir("gs-ib-symlink-probe");
+  try {
+    write(probe, "t.md", "x");
+    symlinkSync(join(probe, "t.md"), join(probe, "l.md"), "file");
+    return true;
+  } catch {
+    return false;
+  } finally {
+    rmSync(probe, { recursive: true, force: true });
+  }
+})();
 
 interface RuleOptions {
   path?: string;
@@ -258,6 +281,46 @@ describe("import-budget path resolution", () => {
     expect(fileCount(summary(findings))).toBe(1);
   });
 
+  it("never resolves a backslash reference (Windows path traversal)", async () => {
+    const root = fixture("gs-ib-backslash");
+    write(root, "secret.md", "SECRET"); // root 直下の囮
+    write(
+      root,
+      "docs/CLAUDE.md",
+      "@docs\\..\\..\\secret.md\n@..\\x.md\n@C:\\x\n@\\\\server\\share\n",
+    );
+    const findings = await lint(root, { path: "docs/CLAUDE.md" });
+    const outside = findings.filter((f) => f.message.includes("outside root, not measured"));
+    expect(outside).toHaveLength(4);
+    expect(outside.map((f) => f.line)).toEqual([1, 2, 3, 4]);
+    // 起点のみ。secret.md も root 外も読み込まれていない
+    expect(fileCount(summary(findings))).toBe(1);
+  });
+
+  it.skipIf(!CAN_SYMLINK)("does not follow a symlink that points outside the root", async () => {
+    const root = fixture("gs-ib-symlink");
+    const outsideDir = fixture("gs-ib-symlink-target");
+    write(outsideDir, "secret.md", "SECRET-OUTSIDE");
+    write(root, "CLAUDE.md", "@link.md\n");
+    symlinkSync(join(outsideDir, "secret.md"), join(root, "link.md"), "file");
+    const findings = await lint(root);
+    const outside = findings.filter((f) => f.message.includes("outside root, not measured"));
+    expect(outside).toHaveLength(1);
+    expect(outside[0].severity).toBe("info");
+    expect(fileCount(summary(findings))).toBe(1);
+    expect(summary(findings).message).not.toContain("SECRET-OUTSIDE");
+  });
+
+  it.skipIf(!CAN_SYMLINK)("follows a symlink that stays inside the root", async () => {
+    const root = fixture("gs-ib-symlink-in");
+    write(root, "docs/real.md", "INSIDE");
+    write(root, "CLAUDE.md", "@link.md\n");
+    symlinkSync(join(root, "docs/real.md"), join(root, "link.md"), "file");
+    const s = summary(await lint(root));
+    expect(fileCount(s)).toBe(2);
+    expect(totalChars(s)).toBe(9 + 6);
+  });
+
   it("reports unresolved imports with file and line", async () => {
     const root = fixture("gs-ib-unresolved");
     write(root, "CLAUDE.md", "intro\n@docs/missing.md\n");
@@ -476,5 +539,28 @@ describe("import parsing internals", () => {
     expect(resolveImportRef("/etc/passwd", "CLAUDE.md")).toBeNull();
     expect(resolveImportRef("C:/win.md", "CLAUDE.md")).toBeNull();
     expect(resolveImportRef(".", "CLAUDE.md")).toBeNull();
+  });
+
+  it("treats the root boundary as separator-delimited", () => {
+    const root = join("C:", "repo");
+    expect(isInsideRoot(root, join(root, "docs", "a.md"))).toBe(true);
+    expect(isInsideRoot(root, root)).toBe(false); // root 自身はファイルではない
+    expect(isInsideRoot(root, `${root}2${sep}a.md`)).toBe(false); // repo2 を repo 配下にしない
+    expect(isInsideRoot(root, join("C:", "other", "a.md"))).toBe(false);
+    // 末尾に区切りが付いた root でも同じ判定になる
+    expect(isInsideRoot(root + sep, join(root, "a.md"))).toBe(true);
+  });
+
+  it("realRoot falls back to the absolute path for a missing directory", () => {
+    const missing = join(makeFixtureDir("gs-ib-realroot"), "nope");
+    expect(realRoot(missing)).toBe(missing);
+  });
+
+  it("rejects every backslash form (Windows separators are not spec syntax)", () => {
+    expect(resolveImportRef("docs\\..\\..\\secret.md", "docs/CLAUDE.md")).toBeNull();
+    expect(resolveImportRef("..\\x.md", "CLAUDE.md")).toBeNull();
+    expect(resolveImportRef("C:\\x", "CLAUDE.md")).toBeNull();
+    expect(resolveImportRef("\\\\server\\share", "CLAUDE.md")).toBeNull();
+    expect(resolveImportRef("docs\\a.md", "CLAUDE.md")).toBeNull();
   });
 });
