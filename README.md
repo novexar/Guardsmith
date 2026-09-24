@@ -92,7 +92,7 @@ jobs:
 
 | Input              | Default                   | Description                                                                                                         |
 | ------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `cli-version`      | `0.6.0`                   | npm version of the CLI to run                                                                                       |
+| `cli-version`      | `0.6.1`                   | npm version of the CLI to run                                                                                       |
 | `root` / `policy`  | `.` / `guard.policy.yaml` | Directory / policy file to lint                                                                                     |
 | `upload-sarif`     | `true`                    | Upload SARIF to Code Scanning (set `"false"` on private repos without GHAS; the SARIF is still kept as an artifact) |
 | `pr-comment`       | `true`                    | Post a summary comment when lint fails                                                                              |

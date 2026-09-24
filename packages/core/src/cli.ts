@@ -100,8 +100,10 @@ export async function main(argv: string[]): Promise<number> {
     case "bump":
       return bump(rest);
     case "new":
+      rejectDryRun(rest);
       return newProject(rest[0]);
     case "explain":
+      rejectDryRun(rest);
       return explain(rest[0]);
     case "version":
     case "--version":
@@ -119,6 +121,14 @@ export async function main(argv: string[]): Promise<number> {
       );
       return 2;
   }
+}
+
+/**
+ * `--dry-run` は `guard bump` 専用。フラグを解析しないコマンド(new / explain)でも
+ * 黙って無視すると「dry-run のつもりだった」取り違えを招くので、明示的に落とす。
+ */
+function rejectDryRun(args: readonly string[]): void {
+  if (args.includes("--dry-run")) throw new Error("unknown flag: --dry-run");
 }
 
 function init(): number {
@@ -153,7 +163,12 @@ interface Flags {
   dryRun: boolean;
 }
 
-function parseFlags(args: string[]): Flags {
+/**
+ * `allowDryRun` は `guard bump` からのみ真にする。全コマンドで受理すると
+ * `guard sync --write --dry-run` が「dry-run のつもりで書き込む」事故になるため、
+ * bump 以外では未知のフラグとして落とす(= 終了コード 2)。
+ */
+function parseFlags(args: string[], allowDryRun = false): Flags {
   const f: Flags = {
     root: ".",
     policy: "guard.policy.yaml",
@@ -180,7 +195,7 @@ function parseFlags(args: string[]): Flags {
     else if (a === "--conflict-markers") f.conflictMarkers = true;
     else if (a === "--init-vars") f.initVars = true;
     else if (a === "--allow-downgrade") f.allowDowngrade = true;
-    else if (a === "--dry-run") f.dryRun = true;
+    else if (a === "--dry-run" && allowDryRun) f.dryRun = true;
     else throw new Error(`unknown flag: ${a}`);
   }
   if (!["console", "sarif", "json"].includes(f.format))
@@ -370,7 +385,7 @@ async function bump(args: string[]): Promise<number> {
   // lint 専用フラグを黙って無視しない(誤ったコマンドラインに気づけるように)
   const lintOnly = rest.find((a) => a === "--format" || a === "--out");
   if (lintOnly !== undefined) throw new Error(`unknown flag: ${lintOnly}`);
-  const f = parseFlags(rest);
+  const f = parseFlags(rest, true);
   return runBump({
     tag,
     rootDir: resolve(f.root),
@@ -461,17 +476,26 @@ async function explain(ruleId?: string): Promise<number> {
   }
 }
 
-/** bin エントリポイント用: プロセスとして main を実行し exit code を反映する */
-export function runCli(): void {
-  main(process.argv.slice(2))
-    .then((code) => process.exit(code))
+/**
+ * bin エントリポイント用: プロセスとして main を実行し exit code を反映する。
+ *
+ * `process.exit()` ではなく `process.exitCode` を立ててイベントループの自然終了に任せる。
+ * リモート取得(undici)のハンドルが閉じ切る前に強制終了すると、Windows で libuv が
+ * `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)` を起こし、意図した 2 ではなく
+ * 127 で落ちる — 「取得に失敗したのか CLI が壊れたのか」が CI から判別できなくなる。
+ */
+export function runCli(): Promise<void> {
+  return main(process.argv.slice(2))
+    .then((code) => {
+      process.exitCode = code;
+    })
     .catch((e: unknown) => {
       console.error(`error: ${(e as Error).message}`);
-      process.exit(2);
+      process.exitCode = 2;
     });
 }
 
 const entry = process.argv[1];
 if (entry && import.meta.url === pathToFileURL(resolve(entry)).href) {
-  runCli();
+  void runCli();
 }

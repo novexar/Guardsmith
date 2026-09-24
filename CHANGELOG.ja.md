@@ -29,6 +29,19 @@
   `guard new` が生成する policy / docs の例 / Action の `release-tag` 既定値)
 - npm: `@guardsmith/core` / `@guardsmith/cli` 0.6.1(Action の `cli-version` 既定値も 0.6.1)
 
+### Fixed
+
+- **リモート取得に失敗したときの終了コードが 127 ではなく 2 になった。** CLI の入口が
+  `process.exit()` を呼んでおり、undici のハンドルが閉じ切る前にプロセスを落とすため、
+  Windows の libuv が `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)` で異常終了し、
+  シェルからは 127 に見えていた。`process.exitCode` を立ててイベントループの自然終了に
+  任せるようにし、存在しないタグや到達できない標準リポジトリが本来の実行エラーとして
+  報告されるようにした(`guard lint` / `sync` / `bump` 共通)
+- **`--dry-run` を `guard bump` 以外では拒否するようにした。** 全サブコマンドで解析されるが
+  読むのは `bump` だけだったため、`guard sync --write --dry-run` が dry-run のつもりで
+  **書き込み**、節単位モードが PJ の編集を上書きしたうえで 0 を返していた。`guard sync` /
+  `guard lint` / `guard new` / `guard explain` は `unknown flag: --dry-run`(終了コード 2)で止まる
+
 ## v0.7.0 (2026-09-24)
 
 「**生成元の標準に PJ を追随させ続ける**」ためのリリース。これまではマスターとの乖離を

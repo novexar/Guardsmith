@@ -448,8 +448,10 @@ describe("runBump --dry-run", () => {
 
     expect(snapshot(built.proj)).toEqual(before);
     expect(joined(log)).toContain("CONFLICT DESIGN.md");
-    // 適用できるものが無い以上、適用案内は出さない(`--write` の誤案内も出さない)
+    // `--write` は別コマンド、`--conflict-markers` は --dry-run と併用できない。
+    // どちらも「従うとエラーになる案内」なので dry-run では出さない
     expect(joined(log)).not.toContain("--write");
+    expect(joined(log)).not.toContain("--conflict-markers");
     expect(err.mock.calls.map((c) => String(c[0])).join("\n")).toContain("would abort");
   });
 

@@ -100,6 +100,14 @@ export function applySync(plan: SyncPlan, rootDir: string): void {
 /** 既定の適用案内。`guard sync --write` で適用するという意味 */
 export const DEFAULT_APPLY_HINT = "--write";
 
+/**
+ * 適用案内の文言。`null` は「この表示では案内を出さない」。
+ *
+ * `guard bump --dry-run` は 3-way と節単位の 2 つの計画を続けて出すため、各サマリに
+ * 案内を付けると同じ案内が 2 行並ぶ。呼び出し側が最後に 1 行だけ出せるようにする。
+ */
+export type ApplyHint = string | null;
+
 export function syncWrites(plan: Readonly<SyncPlan>): PendingWrite[] {
   return plan.actions.map((a) => ({ file: a.file, content: a.content }));
 }
@@ -111,7 +119,11 @@ export function syncWrites(plan: Readonly<SyncPlan>): PendingWrite[] {
  * `--write` だが、`guard bump --dry-run` のように別のコマンドで適用するケースでは
  * 呼び出し側が差し替える(誤ったコマンドを案内しないため)。
  */
-export function formatPlan(plan: SyncPlan, write: boolean, applyHint = DEFAULT_APPLY_HINT): string {
+export function formatPlan(
+  plan: SyncPlan,
+  write: boolean,
+  applyHint: ApplyHint = DEFAULT_APPLY_HINT,
+): string {
   const lines: string[] = [];
   for (const a of plan.actions) {
     if (a.kind === "create") {
@@ -131,7 +143,9 @@ export function formatPlan(plan: SyncPlan, write: boolean, applyHint = DEFAULT_A
         ? " — already in sync"
         : write
           ? " — applied"
-          : ` — dry-run (use ${applyHint} to apply)`),
+          : applyHint === null
+            ? " — dry-run"
+            : ` — dry-run (use ${applyHint} to apply)`),
   );
   return lines.join("\n");
 }

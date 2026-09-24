@@ -2,7 +2,7 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { main } from "../src/cli.js";
+import { main, runCli } from "../src/cli.js";
 import { normalizeMaster, stampFor } from "../src/normalize.js";
 import { writeVars } from "../src/vars.js";
 import { makeFixtureDir, write } from "./helpers.js";
@@ -29,6 +29,32 @@ afterEach(() => {
   process.chdir(prevCwd);
   rmSync(dir, { recursive: true, force: true });
 });
+
+/**
+ * `runCli` を実行し、終了コード(`process.exitCode`)と stderr を検証する。
+ * `process.exit` が呼ばれないことも確かめる — 強制終了は未クローズのソケットと競合し、
+ * Windows で libuv のアサートに化ける。
+ */
+async function expectRunCli(argv: string[], code: number, message: RegExp): Promise<void> {
+  const prevArgv = process.argv;
+  const prevCode = process.exitCode;
+  const err = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const exit = vi.spyOn(process, "exit").mockImplementation((() => {
+    throw new Error("process.exit must not be called");
+  }) as never);
+  process.argv = ["node", "guard", ...argv];
+  try {
+    await runCli();
+    expect(process.exitCode).toBe(code);
+    expect(exit).not.toHaveBeenCalled();
+    expect(err.mock.calls.map((c) => String(c[0])).join("\n")).toMatch(message);
+  } finally {
+    process.argv = prevArgv;
+    process.exitCode = prevCode;
+    exit.mockRestore();
+    err.mockRestore();
+  }
+}
 
 describe("guard init", () => {
   it("creates guard.policy.yaml and refuses to overwrite", async () => {
@@ -253,6 +279,82 @@ describe("guard bump", () => {
       expect(await main(["bump", "--repo", "novexar/guardsmith"])).toBe(2);
     } finally {
       spy.mockRestore();
+    }
+  });
+});
+
+/* ---------------- --dry-run は guard bump 専用 ---------------- */
+
+/**
+ * `--dry-run` を全サブコマンドで受理すると、`guard sync --write --dry-run` が
+ * 「dry-run のつもりで書き込む」事故になる(節単位モードで PJ の編集が上書きされる)。
+ * bump 以外では未知のフラグとして落とすこと。
+ */
+describe("--dry-run は guard bump 専用", () => {
+  it("guard sync --write --dry-run は落ちて 1 ファイルも書かない", async () => {
+    build3Way(false);
+    const before = readFileSync(join(dir, "CLAUDE.md"), "utf8");
+
+    await expect(main(["sync", "--write", "--dry-run"])).rejects.toThrow(/unknown flag: --dry-run/);
+
+    expect(readFileSync(join(dir, "CLAUDE.md"), "utf8")).toBe(before);
+    expect(readFileSync(join(dir, "guardsmith.vars.yaml"), "utf8")).toContain('"v0.6.0"');
+  });
+
+  it("節単位モードの guard sync --write --dry-run も書かない", async () => {
+    const master = join(dir, "master");
+    write(master, ".claude/skills/start-task/SKILL.md", "intro\n## 手順\nmaster\n");
+    write(dir, ".claude/skills/start-task/SKILL.md", "intro\n## 手順\nlocal edit\n");
+    writeFileSync(join(dir, "guard.policy.yaml"), DRIFT_POLICY(master));
+
+    await expect(main(["sync", "--write", "--dry-run"])).rejects.toThrow(/unknown flag: --dry-run/);
+
+    expect(readFileSync(join(dir, ".claude/skills/start-task/SKILL.md"), "utf8")).toContain(
+      "local edit",
+    );
+  });
+
+  it("lint / new / explain も受け付けない", async () => {
+    writeFileSync(join(dir, "guard.policy.yaml"), SIMPLE_POLICY);
+    const dest = join(dir, "scaffold");
+    for (const argv of [
+      ["lint", "--dry-run"],
+      ["new", dest, "--dry-run"],
+      ["explain", "t/exists", "--dry-run"],
+    ]) {
+      await expect(main(argv)).rejects.toThrow(/unknown flag: --dry-run/);
+    }
+    expect(existsSync(dest)).toBe(false);
+  });
+
+  it("runCli は未知のフラグを終了コード 2 にする", async () => {
+    writeFileSync(join(dir, "guard.policy.yaml"), SIMPLE_POLICY);
+    await expectRunCli(["sync", "--write", "--dry-run"], 2, /unknown flag: --dry-run/);
+  });
+});
+
+/* ---------------- 取得失敗時の終了コード ---------------- */
+
+/**
+ * `runCli` が `process.exit()` を呼ぶと、リモート取得(undici)のハンドルが閉じ切る前に
+ * プロセスを落とし、Windows の libuv が `UV_HANDLE_CLOSING` アサートで異常終了する
+ * (意図した 2 ではなく 127)。`process.exitCode` で自然終了させること。
+ */
+describe("リモート取得に失敗したとき", () => {
+  const MISSING_TAG_POLICY = `version: 1
+target: claude-code
+extends:
+  - github:novexar/guardsmith//presets/baseline.yaml@v9.9.9
+rules: []
+`;
+
+  it("guard lint は終了コード 2 とエラーメッセージで終わる", async () => {
+    writeFileSync(join(dir, "guard.policy.yaml"), MISSING_TAG_POLICY);
+    vi.stubGlobal("fetch", () => Promise.resolve(new Response(null, { status: 404 })));
+    try {
+      await expectRunCli(["lint", "--no-cache"], 2, /HTTP 404/);
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
 });

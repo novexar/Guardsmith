@@ -417,7 +417,7 @@ describe("M2: guard bump は節単位 drift(skills)も新タグのマスター�
     expect(out).toContain("restored (sections)");
   });
 
-  it("--dry-run は節単位の計画も出すが、適用案内は 1 行だけで --write を含まない", async () => {
+  it("--dry-run は 3-way と節単位の両方を出すが、適用案内は全体で 1 行だけ", async () => {
     const p = buildProject({ skills: "github" });
     const before = snapshot(p.proj);
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
@@ -426,10 +426,14 @@ describe("M2: guard bump は節単位 drift(skills)も新タグのマスター�
 
     expect(snapshot(p.proj)).toEqual(before);
     const lines = log.mock.calls.flatMap((c) => String(c[0]).split("\n"));
+    // 2 つの計画が並ぶ policy(drift3 + skills の drift)でも案内は重複しない
+    expect(lines.some((l) => l.startsWith("MERGE "))).toBe(true);
     expect(lines.some((l) => l.startsWith("RESTORE "))).toBe(true);
-    // 節単位モードの表示も `guard sync --write` ではなく bump の再実行を案内する
+    expect(lines.filter((l) => l.includes("to apply"))).toEqual([
+      "dry-run (use without --dry-run to apply)",
+    ]);
+    // `guard sync --write` は「現在のタグ」を適用する別コマンド。案内してはならない
     expect(lines.filter((l) => l.includes("--write"))).toEqual([]);
-    expect(lines.filter((l) => l.includes("to apply"))).toHaveLength(2);
   });
 
   it("bump 直後に lint を回しても drift/skills-sync が再発しない", async () => {

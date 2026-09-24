@@ -91,7 +91,7 @@ jobs:
 
 | input              | 既定値                    | 説明                                                                                                  |
 | ------------------ | ------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `cli-version`      | `0.6.0`                   | 実行する CLI の npm バージョン                                                                        |
+| `cli-version`      | `0.6.1`                   | 実行する CLI の npm バージョン                                                                        |
 | `root` / `policy`  | `.` / `guard.policy.yaml` | 検査対象 / ポリシーファイル                                                                           |
 | `upload-sarif`     | `true`                    | Code Scanning への SARIF アップロード(GHAS の無い private では `"false"`。SARIF は artifact にも残る) |
 | `pr-comment`       | `true`                    | 失敗時の PR コメント                                                                                  |

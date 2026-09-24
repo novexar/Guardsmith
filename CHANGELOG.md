@@ -34,6 +34,19 @@ tag, builds the real plan, and writes nothing.
 - npm: `@guardsmith/core` / `@guardsmith/cli` 0.6.1 (the Action's `cli-version` default is
   also 0.6.1)
 
+### Fixed
+
+- **A failed remote fetch now exits 2 instead of 127.** The CLI entry point called
+  `process.exit()`, which tore the process down while undici still had open handles; on
+  Windows libuv aborted with `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)` and
+  the shell saw 127. It now sets `process.exitCode` and lets the event loop drain, so a
+  missing tag or an unreachable standards repository is reported as the run-time error it
+  is (`guard lint` / `sync` / `bump` alike)
+- **`--dry-run` is rejected everywhere except `guard bump`.** The flag was parsed for every
+  subcommand but only read by `bump`, so `guard sync --write --dry-run` silently _wrote_ —
+  the section-level restore overwrote project edits and exited 0. `guard sync`, `guard lint`,
+  `guard new` and `guard explain` now fail with `unknown flag: --dry-run` (exit 2)
+
 ## v0.7.0 (2026-09-24)
 
 A release about **keeping a project in step with the standards it was generated from**.

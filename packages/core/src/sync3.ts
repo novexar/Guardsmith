@@ -12,7 +12,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { projectPath, writeAtomically, type PendingWrite } from "./atomic.js";
-import { DEFAULT_APPLY_HINT } from "./sync.js";
+import { DEFAULT_APPLY_HINT, type ApplyHint } from "./sync.js";
 import { createGlobScope, globFiles, type GlobScope } from "./glob.js";
 import { detectEol, merge3, type ConflictRegion } from "./merge3.js";
 import { STAMP_RE, normalizeMaster, stampFor } from "./normalize.js";
@@ -253,7 +253,7 @@ export function formatDowngrade(d: Readonly<Sync3Downgrade>): string {
 export function formatSync3Plan(
   plan: Readonly<Sync3Plan>,
   write: boolean,
-  applyHint = DEFAULT_APPLY_HINT,
+  applyHint: ApplyHint = DEFAULT_APPLY_HINT,
 ): string {
   const lines: string[] = [`standards ${plan.baseTag} → ${plan.nextTag}`];
   for (const a of plan.actions) {
@@ -460,15 +460,20 @@ function formatAction(a: Readonly<Sync3Action>): string | null {
   }
 }
 
-function summary(plan: Readonly<Sync3Plan>, write: boolean, applyHint: string): string {
+function summary(plan: Readonly<Sync3Plan>, write: boolean, applyHint: ApplyHint): string {
   const count = (kind: Sync3Kind): number => plan.actions.filter((a) => a.kind === kind).length;
   const head =
     `${count("merge")} merge, ${count("create")} create, ${plan.conflicted.length} conflict, ` +
     `${count("skip-deleted")} skipped, ${count("removed")} removed, ${plan.localOnly.length} project-local`;
   if (plan.conflicted.length > 0) {
-    return `${head} — conflicts must be resolved manually (nothing written without --conflict-markers)`;
+    // dry-run(applyHint 無し)では --conflict-markers を案内しない。
+    // `guard bump --dry-run` とは併用できないフラグで、従うと usage エラーになる
+    return applyHint === null
+      ? `${head} — conflicts must be resolved manually`
+      : `${head} — conflicts must be resolved manually (nothing written without --conflict-markers)`;
   }
   const changes = count("merge") + count("create");
   if (changes === 0) return `${head} — already in sync`;
-  return write ? `${head} — applied` : `${head} — dry-run (use ${applyHint} to apply)`;
+  if (write) return `${head} — applied`;
+  return applyHint === null ? `${head} — dry-run` : `${head} — dry-run (use ${applyHint} to apply)`;
 }

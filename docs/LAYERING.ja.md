@@ -40,7 +40,7 @@ rules:
 version: 1
 target: claude-code
 extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v0.6.0 # ← Layer 1を継承
+  - github:novexar/guardsmith//presets/baseline.yaml@v0.7.1 # ← Layer 1を継承
 rules:
   # 上書き: 社内では違反をerror扱いに格上げ (同じidで再定義=上書き)
   - id: claude-md/thin-diff
@@ -115,7 +115,7 @@ exemptions:
 
 - `extends: github:owner/repo[//path]@tag` / drift `source: github:owner/repo[//path]@tag` が動作する
   - `//path` 省略時: extends はリポジトリルートの `guard.policy.yaml`、drift はリポジトリルートを参照
-  - drift の `//path` はマスターがサブディレクトリの場合に指定(例: `github:novexar/guardsmith//standards@v0.6.0`)
+  - drift の `//path` はマスターがサブディレクトリの場合に指定(例: `github:novexar/guardsmith//standards@v0.7.1`)
 - 取得方式: codeload.github.com の tarball(タグ固定)。private リポジトリは `GITHUB_TOKEN` 環境変数で認証
 - キャッシュ: `~/.guardsmith/cache/<owner>/<repo>/<tag>/`。タグは不変前提で再取得しない。
   `guard lint --no-cache` で強制再取得
