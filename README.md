@@ -89,7 +89,7 @@ jobs:
 
 | Input              | Default                   | Description                                                                                                         |
 | ------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `cli-version`      | `0.4.0`                   | npm version of the CLI to run                                                                                       |
+| `cli-version`      | `0.5.0`                   | npm version of the CLI to run                                                                                       |
 | `root` / `policy`  | `.` / `guard.policy.yaml` | Directory / policy file to lint                                                                                     |
 | `upload-sarif`     | `true`                    | Upload SARIF to Code Scanning (set `"false"` on private repos without GHAS; the SARIF is still kept as an artifact) |
 | `pr-comment`       | `true`                    | Post a summary comment when lint fails                                                                              |
@@ -172,6 +172,19 @@ the file containing them, recursion is capped at four hops, and `@` inside code 
 fenced code blocks is not an import — wrap a path in backticks to mention it without
 importing it.
 
+> **Write package names in backticks.** Because `@` is recognized anywhere in the file —
+> including mid-sentence, which Japanese prose requires — a bare `@scope/pkg` is read as an
+> import by Claude Code as well, and `import-budget` reports it as `unresolved import`.
+> Write `` `@scope/pkg` `` instead; that is the officially documented way to mention a path
+> without importing it.
+
+### Policy schema
+
+The policy schema is **strict**: an unknown key under `with`, or an unknown top-level key
+on a rule, is a **parse error** naming the offending path
+(`rules.0.with: Unrecognized key: "limt"`) rather than a silently dropped field. A typo
+therefore fails the run instead of quietly disabling a rule.
+
 ### What gets scanned
 
 Checks operate on **files that could be committed**:
@@ -224,6 +237,14 @@ audit keeps working on projects that keep `.claude/settings.json` local. Use
 Existing projects are tag-pinned and keep working untouched. When you are ready to adopt a
 new standards release, follow the step-by-step checklist in
 [docs/migration/v0.6.0.md](docs/migration/v0.6.0.md) — every step is optional and independent.
+Coming from an older release? Apply [v0.5.0](docs/migration/v0.5.0.md),
+[v0.5.1](docs/migration/v0.5.1.md) and [v0.5.2](docs/migration/v0.5.2.md) first; every
+release's checklist lives in [docs/migration/](docs/migration/).
+
+> **CLI version**: the v0.6.0 baseline needs `@guardsmith/cli` **0.5.0 or newer** (it
+> carries the `import-budget` check, which an older CLI rejects as unknown under its strict
+> schema). Upgrade the CLI before bumping the `extends` tag. 0.4.0 was never published to
+> npm — 0.5.0 superseded it on the same day.
 
 ## Acknowledgements
 

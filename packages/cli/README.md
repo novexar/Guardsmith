@@ -67,6 +67,16 @@ as missing. The policy's `ignore` globs are excluded on top of that, and exclude
 pruned during traversal rather than filtered afterwards. `--no-gitignore` restores the full
 scan when you want to audit ignored files.
 
+`guard lint` also measures how much context a `CLAUDE.md` keeps resident: `import-budget`
+adds up the entry file plus every file reached through its `@path` imports and always
+reports one `info` (`resident context: N files, X chars (≈Y tokens, rough estimate)` plus a
+per-file breakdown; the token figure is a rough `chars / 4` estimate). Nothing outside the
+scan root is read. Write package names as `` `@scope/pkg` `` — `@` is an import anywhere in
+the file, so a bare `@scope/pkg` is read as one and reported as `unresolved import`.
+
+The policy schema is strict: unknown keys under `with` or on a rule are **parse errors**
+naming the offending path, not silently dropped fields.
+
 After `guard new`, open the project with Claude Code — the bundled `init-project` skill
 interviews you and concretizes the templates. `guard lint` passes once initialization
 is genuinely complete.

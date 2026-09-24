@@ -88,7 +88,7 @@ jobs:
 
 | input              | 既定値                    | 説明                                                                                                  |
 | ------------------ | ------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `cli-version`      | `0.4.0`                   | 実行する CLI の npm バージョン                                                                        |
+| `cli-version`      | `0.5.0`                   | 実行する CLI の npm バージョン                                                                        |
 | `root` / `policy`  | `.` / `guard.policy.yaml` | 検査対象 / ポリシーファイル                                                                           |
 | `upload-sarif`     | `true`                    | Code Scanning への SARIF アップロード(GHAS の無い private では `"false"`。SARIF は artifact にも残る) |
 | `pr-comment`       | `true`                    | 失敗時の PR コメント                                                                                  |
@@ -169,6 +169,19 @@ exemptions: [] # 期限付き例外(reason + approved_by + expires 必須)
 再帰は 4 hops まで、コードスパン・フェンスドコードブロック内の `@` はインポートではありません
 (取り込まずにパスを書きたいときはバッククォートで囲みます)。
 
+> **パッケージ名はバッククォートで囲んでください。** `@` はファイル中のどこでも有効
+> (日本語では文中に `@` が現れるため必須の仕様)なので、`@scope/pkg` を裸で書くと
+> Claude Code もインポートとして読みに行き、`import-budget` は `unresolved import` を
+> 報告します。`` `@scope/pkg` `` と書いてください——これが取り込まずにパスを書くための
+> 公式な方法です。
+
+### ポリシースキーマ
+
+ポリシースキーマは**厳格(strict)**です。`with` の未知キーとルール直下の未知キーは、
+黙って捨てられるのではなく該当パス付きの**parse エラー**になります
+(`rules.0.with: Unrecognized key: "limt"`)。typo はルールを静かに無効化するのではなく、
+実行を失敗させます。
+
 ### 走査の対象
 
 各 check は「**コミットされうるファイル**」を対象にします:
@@ -218,6 +231,14 @@ exemptions: [] # 期限付き例外(reason + approved_by + expires 必須)
 既存プロジェクトはタグ固定のため、何もしなくても壊れません。新しい標準リリースへ追随する
 際は [docs/migration/v0.6.0.ja.md](docs/migration/v0.6.0.ja.md) のチェックリストに従ってください
 ——各項目は任意・独立で、段階適用できます。
+それより古い版からの移行は [v0.5.0](docs/migration/v0.5.0.ja.md)・
+[v0.5.1](docs/migration/v0.5.1.ja.md)・[v0.5.2](docs/migration/v0.5.2.ja.md) を先に適用して
+ください。各リリースのチェックリストは [docs/migration/](docs/migration/) にあります。
+
+> **CLI のバージョン**: v0.6.0 の baseline は `@guardsmith/cli` **0.5.0 以上**が必要です
+> (`import-budget` check を含み、旧 CLI は strict スキーマで未知の check として拒否します)。
+> `extends` タグを上げる前に CLI を上げてください。0.4.0 は npm に未公開で、同日に 0.5.0 が
+> 置き換えています。
 
 ## 謝辞・クレジット
 

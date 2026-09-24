@@ -40,7 +40,7 @@ rules:
 version: 1
 target: claude-code
 extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v0.5.0 # ← Layer 1を継承
+  - github:novexar/guardsmith//presets/baseline.yaml@v0.6.0 # ← Layer 1を継承
 rules:
   # 上書き: 社内では違反をerror扱いに格上げ (同じidで再定義=上書き)
   - id: claude-md/thin-diff
@@ -76,7 +76,9 @@ exemptions:
 1. extends を宣言順に読み込み、rules を **id をキーに** マージする
 2. 同じ id が再定義されたら **後勝ち**(Layer 3 > Layer 2 > Layer 1)
 3. exemptions は上書きではなく **連結**(どの層の例外も有効。ただし期限必須)
-4. リモート参照は **タグ固定必須**(`@vX.Y.Z`)。「標準が知らぬ間に変わった」を防ぐ
+4. トップレベルの `ignore`(glob)も上書きではなく **連結**(宣言順を保ち重複のみ除去)。
+   組織 overlay 側の除外が各 PJ に必ず届き、PJ 側から黙って外すことはできない
+5. リモート参照は **タグ固定必須**(`@vX.Y.Z`)。「標準が知らぬ間に変わった」を防ぐ
 
 ## なぜこの分割なのか
 
@@ -105,7 +107,7 @@ exemptions:
 
 - `extends: github:owner/repo[//path]@tag` / drift `source: github:owner/repo[//path]@tag` が動作する
   - `//path` 省略時: extends はリポジトリルートの `guard.policy.yaml`、drift はリポジトリルートを参照
-  - drift の `//path` はマスターがサブディレクトリの場合に指定(例: `github:novexar/guardsmith//standards@v0.5.0`)
+  - drift の `//path` はマスターがサブディレクトリの場合に指定(例: `github:novexar/guardsmith//standards@v0.6.0`)
 - 取得方式: codeload.github.com の tarball(タグ固定)。private リポジトリは `GITHUB_TOKEN` 環境変数で認証
 - キャッシュ: `~/.guardsmith/cache/<owner>/<repo>/<tag>/`。タグは不変前提で再取得しない。
   `guard lint --no-cache` で強制再取得

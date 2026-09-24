@@ -55,10 +55,17 @@ if (parsed.ok) {
 ```
 
 Key exports: `parsePolicy` / `PolicyDocument`, reusable schema parts (`Rule`, `Exemption`,
-`Severity`) for composing your own policy documents, `runLint` / `formatConsole` / `toSarif`,
-`loadPolicy` (multi-level `extends` resolution across `preset:` / `file:` / `github:` refs),
-and `createGlobScope` / `globFiles` (the shared file walker that applies `ignore` and
+`Severity`) for composing your own policy documents,
+`runLint(policy, root, now?, { gitignore })` / `formatConsole` / `toSarif`,
+`planSync(policy, root, { gitignore })`, `loadPolicy` (multi-level `extends` resolution
+across `preset:` / `file:` / `github:` refs — `rules` merge by id with the later layer
+winning, while `exemptions` and the top-level `ignore` globs are concatenated), and
+`createGlobScope` / `globFiles` (the shared file walker that applies `ignore` and
 `.gitignore`).
+
+`gitignore` defaults to `true` in both entry points; pass `{ gitignore: false }` for the
+full scan (the CLI's `--no-gitignore`). `runLint`'s third argument is the clock used to
+evaluate exemption expiry, so pass it explicitly when you need reproducible results.
 
 ## Documentation
 

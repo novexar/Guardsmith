@@ -66,6 +66,16 @@ npx @guardsmith/cli version
 `ignore`(glob)を除外し、除外対象は結果フィルタではなく走査の時点で枝刈りします。
 `--no-gitignore` で全走査に戻せます。
 
+`guard lint` は `CLAUDE.md` の常駐量も測ります。`import-budget` は起点ファイルと `@path`
+インポートで到達する全ファイルを合算し、必ず `info` を1件出します
+(`resident context: N files, X chars (≈Y tokens, rough estimate)` + ファイル別内訳。
+トークン数は `chars / 4` の粗い目安)。走査ルートの外は読みません。パッケージ名は
+`` `@scope/pkg` `` と書いてください — `@` はファイル中のどこでも有効なので、裸で書くと
+インポートとみなされ `unresolved import` として報告されます。
+
+ポリシースキーマは厳格です。`with` の未知キーとルール直下の未知キーは、黙って捨てられる
+のではなく該当パス付きの **parse エラー**になります。
+
 `guard new` の後は Claude Code でプロジェクトを開いてください — 同梱の `init-project`
 スキルがインタビューを行い、テンプレートを具体化します。初期化が本当に完了すると
 `guard lint` が PASS します。
@@ -77,12 +87,12 @@ npx @guardsmith/cli version
 version: 1
 target: claude-code
 extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v0.6.0 # tag pinning is mandatory
-  # Projects with a frontend also add:
+  - github:novexar/guardsmith//presets/baseline.yaml@v0.6.0 # タグ固定は必須
+  # フロントエンドを持つプロジェクトはさらに:
   # - github:novexar/guardsmith//presets/frontend.yaml@v0.6.0
 ignore: [] # 全走査から除外する glob(extends 間で連結される)
-rules: [] # add or override (redefining an id overrides it)
-exemptions: [] # time-boxed waivers: reason + approved_by + expires required
+rules: [] # 追加・上書き(同じ id の再定義=上書き)
+exemptions: [] # 期限付き例外(reason + approved_by + expires 必須)
 ```
 
 `extends` は OSS baseline → private 組織 overlay → PJ ごとのポリシー、と合成されます。

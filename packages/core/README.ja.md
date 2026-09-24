@@ -54,10 +54,16 @@ if (parsed.ok) {
 ```
 
 主なエクスポート: `parsePolicy` / `PolicyDocument`、独自のポリシードキュメントを組み立てる
-ための再利用可能なスキーマ部品(`Rule`、`Exemption`、`Severity`)、`runLint` /
-`formatConsole` / `toSarif`、`loadPolicy`(`preset:` / `file:` / `github:` 参照をまたぐ
-多段 `extends` 解決)、`createGlobScope` / `globFiles`(`ignore` と `.gitignore` を適用する
-共通のファイル走査)。
+ための再利用可能なスキーマ部品(`Rule`、`Exemption`、`Severity`)、
+`runLint(policy, root, now?, { gitignore })` / `formatConsole` / `toSarif`、
+`planSync(policy, root, { gitignore })`、`loadPolicy`(`preset:` / `file:` / `github:` 参照を
+またぐ多段 `extends` 解決。`rules` は id をキーに後勝ちでマージし、`exemptions` と
+トップレベルの `ignore` は連結)、`createGlobScope` / `globFiles`(`ignore` と `.gitignore` を
+適用する共通のファイル走査)。
+
+`gitignore` の既定はどちらも `true` です。`{ gitignore: false }` を渡すと全走査に戻ります
+(CLI の `--no-gitignore` 相当)。`runLint` の第3引数は exemption の期限判定に使う時刻なので、
+再現性が必要な場合は明示的に渡してください。
 
 ## ドキュメント
 

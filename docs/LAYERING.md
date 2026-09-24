@@ -42,7 +42,7 @@ rules:
 version: 1
 target: claude-code
 extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v0.5.0 # ← inherits Layer 1
+  - github:novexar/guardsmith//presets/baseline.yaml@v0.6.0 # ← inherits Layer 1
 rules:
   # Override: escalate the violation to error in-house (redefining the same id = override)
   - id: claude-md/thin-diff
@@ -79,7 +79,10 @@ exemptions:
 2. If the same id is redefined, **the later one wins** (Layer 3 > Layer 2 > Layer 1)
 3. `exemptions` are **concatenated**, not overridden (exemptions from any layer apply,
    but an expiry date is mandatory)
-4. Remote references **require tag pinning** (`@vX.Y.Z`) — prevents "the standards changed
+4. The top-level `ignore` globs are **concatenated** as well, not overridden — declaration
+   order is preserved and only duplicates are removed, so an organization overlay's
+   exclusions reach every project and a project cannot silently drop them
+5. Remote references **require tag pinning** (`@vX.Y.Z`) — prevents "the standards changed
    without anyone noticing"
 
 ## Why this split
@@ -116,7 +119,7 @@ Not only rules — templates work the same way:
   - When `//path` is omitted: extends refers to `guard.policy.yaml` at the repository
     root, drift refers to the repository root
   - Specify drift's `//path` when the master lives in a subdirectory
-    (e.g. `github:novexar/guardsmith//standards@v0.5.0`)
+    (e.g. `github:novexar/guardsmith//standards@v0.6.0`)
 - Fetch method: tarball from codeload.github.com (tag-pinned). Private repositories
   authenticate via the `GITHUB_TOKEN` environment variable
 - Cache: `~/.guardsmith/cache/<owner>/<repo>/<tag>/`. Tags are assumed immutable, so no

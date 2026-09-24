@@ -85,7 +85,9 @@ worktree 等)を抱える PJ で毎回その走査コストを払わなくなり
   baseline には `ignore:` キーを**入れない** — CLI 0.3.0 の strict スキーマが未知キーを拒否するため
 - リモート参照タグ・生成物のスタンプを v0.5.2 に更新(baseline の drift source /
   `guard new` の policy 生成 / docs 例示 / Action の `release-tag` 既定)
-- npm: `@guardsmith/core` / `@guardsmith/cli` 0.4.0(Action の `cli-version` 既定も 0.4.0)
+- npm: `@guardsmith/core` / `@guardsmith/cli` 0.4.0(Action の `cli-version` 既定も 0.4.0)。
+  **0.4.0 は npm に未公開** — 同日リリースの v0.6.0 に同梱された 0.5.0 に置き換わった。
+  0.5.0 以上を使うこと
 
 ## v0.5.1 (2026-09-16)
 
