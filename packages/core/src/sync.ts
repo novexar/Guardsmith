@@ -97,12 +97,21 @@ export function applySync(plan: SyncPlan, rootDir: string): void {
 }
 
 /** 適用対象の書き込み一覧。`guard bump` が 3-way の分と 1 つのバッチにまとめる */
+/** 既定の適用案内。`guard sync --write` で適用するという意味 */
+export const DEFAULT_APPLY_HINT = "--write";
+
 export function syncWrites(plan: Readonly<SyncPlan>): PendingWrite[] {
   return plan.actions.map((a) => ({ file: a.file, content: a.content }));
 }
 
-/** dry-run / 適用結果の表示 */
-export function formatPlan(plan: SyncPlan, write: boolean): string {
+/**
+ * dry-run / 適用結果の表示。
+ *
+ * `applyHint` は「適用するには何をすればよいか」の案内文言。既定は `guard sync` 向けの
+ * `--write` だが、`guard bump --dry-run` のように別のコマンドで適用するケースでは
+ * 呼び出し側が差し替える(誤ったコマンドを案内しないため)。
+ */
+export function formatPlan(plan: SyncPlan, write: boolean, applyHint = DEFAULT_APPLY_HINT): string {
   const lines: string[] = [];
   for (const a of plan.actions) {
     if (a.kind === "create") {
@@ -122,7 +131,7 @@ export function formatPlan(plan: SyncPlan, write: boolean): string {
         ? " — already in sync"
         : write
           ? " — applied"
-          : " — dry-run (use --write to apply)"),
+          : ` — dry-run (use ${applyHint} to apply)`),
   );
   return lines.join("\n");
 }

@@ -12,6 +12,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { projectPath, writeAtomically, type PendingWrite } from "./atomic.js";
+import { DEFAULT_APPLY_HINT } from "./sync.js";
 import { createGlobScope, globFiles, type GlobScope } from "./glob.js";
 import { detectEol, merge3, type ConflictRegion } from "./merge3.js";
 import { STAMP_RE, normalizeMaster, stampFor } from "./normalize.js";
@@ -242,8 +243,18 @@ export function formatDowngrade(d: Readonly<Sync3Downgrade>): string {
   );
 }
 
-/** dry-run / 適用結果の表示 */
-export function formatSync3Plan(plan: Readonly<Sync3Plan>, write: boolean): string {
+/**
+ * dry-run / 適用結果の表示。
+ *
+ * `applyHint` は「適用するには何をすればよいか」の案内文言。既定は `guard sync` 向けの
+ * `--write` だが、`guard bump --dry-run` のように別のコマンドで適用するケースでは
+ * 呼び出し側が差し替える(誤ったコマンドを案内しないため)。
+ */
+export function formatSync3Plan(
+  plan: Readonly<Sync3Plan>,
+  write: boolean,
+  applyHint = DEFAULT_APPLY_HINT,
+): string {
   const lines: string[] = [`standards ${plan.baseTag} → ${plan.nextTag}`];
   for (const a of plan.actions) {
     const line = formatAction(a);
@@ -254,7 +265,7 @@ export function formatSync3Plan(plan: Readonly<Sync3Plan>, write: boolean): stri
     if (a.note !== undefined) lines.push(`INFO     ${a.file} — ${a.note}`);
   }
   for (const f of plan.localOnly) lines.push(`KEEP     ${f} (project-local, not in master)`);
-  lines.push("", summary(plan, write));
+  lines.push("", summary(plan, write, applyHint));
   return lines.join("\n");
 }
 
@@ -449,7 +460,7 @@ function formatAction(a: Readonly<Sync3Action>): string | null {
   }
 }
 
-function summary(plan: Readonly<Sync3Plan>, write: boolean): string {
+function summary(plan: Readonly<Sync3Plan>, write: boolean, applyHint: string): string {
   const count = (kind: Sync3Kind): number => plan.actions.filter((a) => a.kind === kind).length;
   const head =
     `${count("merge")} merge, ${count("create")} create, ${plan.conflicted.length} conflict, ` +
@@ -459,5 +470,5 @@ function summary(plan: Readonly<Sync3Plan>, write: boolean): string {
   }
   const changes = count("merge") + count("create");
   if (changes === 0) return `${head} — already in sync`;
-  return write ? `${head} — applied` : `${head} — dry-run (use --write to apply)`;
+  return write ? `${head} — applied` : `${head} — dry-run (use ${applyHint} to apply)`;
 }

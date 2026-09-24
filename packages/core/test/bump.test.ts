@@ -426,6 +426,18 @@ describe("runBump --dry-run", () => {
     expect(out).toContain("dry-run (use without --dry-run to apply)");
   });
 
+  it("適用案内は 1 行だけで、--write は案内しない", async () => {
+    const built = buildProject();
+    const log = quietLog();
+
+    expect(await runBump({ ...bumpOpts(built), dryRun: true })).toBe(0);
+
+    const lines = joined(log).split("\n");
+    // `guard sync --write` は「現在のタグ」を適用する別コマンド。bump の計画の案内にはならない
+    expect(lines.filter((l) => l.includes("--write"))).toEqual([]);
+    expect(lines.filter((l) => l.includes("to apply"))).toHaveLength(1);
+  });
+
   it("衝突あり: 1 を返し、衝突を予告したうえで何も書かない", async () => {
     const built = buildProject({ conflict: true });
     const before = snapshot(built.proj);
@@ -436,7 +448,8 @@ describe("runBump --dry-run", () => {
 
     expect(snapshot(built.proj)).toEqual(before);
     expect(joined(log)).toContain("CONFLICT DESIGN.md");
-    expect(joined(log)).toContain("dry-run (use without --dry-run to apply)");
+    // 適用できるものが無い以上、適用案内は出さない(`--write` の誤案内も出さない)
+    expect(joined(log)).not.toContain("--write");
     expect(err.mock.calls.map((c) => String(c[0])).join("\n")).toContain("would abort");
   });
 

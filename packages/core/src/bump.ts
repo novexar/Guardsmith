@@ -24,6 +24,9 @@ import {
 import { loadVars, TAG_RE, VARS_FILENAME } from "./vars.js";
 import type { RemoteOptions } from "./remote.js";
 
+/** dry-run の適用案内。`guard sync --write` ではなく「--dry-run を外して再実行」が正しい */
+const BUMP_APPLY_HINT = "without --dry-run";
+
 export interface RewrittenRef {
   /** 置換が起きた行(前後の空白は落とす) */
   line: string;
@@ -226,25 +229,29 @@ the files and ${VARS_FILENAME} are at ${tag}, but ` +
  * dry-run の表示。実行時と同じ計画をそのまま出し、policy の書き換えは「予定行」として見せる。
  * 終了コードも適用時と揃える(0 = このまま適用できる / 1 = 衝突あり)ので、CI で
  * 「上げられるか」を先に判定できる。
+ *
+ * 適用案内は両フォーマッタへ差し替え文言を渡して **1 行だけ**出す。`guard sync` 既定の
+ * `--write` をここで出すと、bump の計画を `guard sync --write`(= 現在のタグ)で適用しろ、
+ * という誤った案内になる。
  */
 function reportDryRun(
   plan: Readonly<Sync3Plan>,
   sectionPlan: Readonly<SyncPlan>,
   ref: { rewritten: readonly RewrittenRef[]; tag: string },
 ): number {
-  console.log(formatSync3Plan(plan, false));
-  if (sectionPlan.actions.length > 0) console.log(formatPlan(sectionPlan, false));
+  console.log(formatSync3Plan(plan, false, BUMP_APPLY_HINT));
+  if (sectionPlan.actions.length > 0) {
+    console.log(formatPlan(sectionPlan, false, BUMP_APPLY_HINT));
+  }
   for (const r of ref.rewritten) {
     console.log(`POLICY   ${r.from} → ${r.to}  (${r.line})`);
   }
-  if (plan.conflicted.length > 0) {
-    console.error(
-      `bump would abort: ${plan.conflicted.length} file(s) conflict — ` +
-        `resolve them before running \`guard bump ${ref.tag}\``,
-    );
-  }
-  console.log("dry-run (use without --dry-run to apply)");
-  return plan.conflicted.length > 0 ? 1 : 0;
+  if (plan.conflicted.length === 0) return 0;
+  console.error(
+    `bump would abort: ${plan.conflicted.length} file(s) conflict — ` +
+      `resolve them before running \`guard bump ${ref.tag}\``,
+  );
+  return 1;
 }
 
 function lineAt(text: string, offset: number): string {

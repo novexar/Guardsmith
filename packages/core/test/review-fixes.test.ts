@@ -417,6 +417,21 @@ describe("M2: guard bump は節単位 drift(skills)も新タグのマスター�
     expect(out).toContain("restored (sections)");
   });
 
+  it("--dry-run は節単位の計画も出すが、適用案内は 1 行だけで --write を含まない", async () => {
+    const p = buildProject({ skills: "github" });
+    const before = snapshot(p.proj);
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    expect(await runBump({ ...bumpOpts(p), dryRun: true })).toBe(0);
+
+    expect(snapshot(p.proj)).toEqual(before);
+    const lines = log.mock.calls.flatMap((c) => String(c[0]).split("\n"));
+    expect(lines.some((l) => l.startsWith("RESTORE "))).toBe(true);
+    // 節単位モードの表示も `guard sync --write` ではなく bump の再実行を案内する
+    expect(lines.filter((l) => l.includes("--write"))).toEqual([]);
+    expect(lines.filter((l) => l.includes("to apply"))).toHaveLength(2);
+  });
+
   it("bump 直後に lint を回しても drift/skills-sync が再発しない", async () => {
     const p = buildProject({ skills: "github" });
     vi.spyOn(console, "log").mockImplementation(() => undefined);

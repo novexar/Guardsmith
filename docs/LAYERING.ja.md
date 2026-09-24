@@ -104,9 +104,11 @@ exemptions:
 ## 運用フロー
 
 1. 標準を改訂 → Layer 1(または2)にコミットし、新タグを打つ(例: v0.3.0)
-2. 各PJで `guard sync`(dry-run)→ `guard bump <tag>` を実行する。guard.policy.yaml の
-   `extends` タグ・標準ファイル本体・`guardsmith.vars.yaml` が 1 コマンドで新タグへ進む。
-   結果を PR にする
+2. 各PJで `guard bump <tag> --dry-run` で差分と衝突予測を確認 → `guard bump <tag>` を
+   実行する。guard.policy.yaml の `extends` タグ・標準ファイル本体・`guardsmith.vars.yaml`
+   が 1 コマンドで新タグへ進む。結果を PR にする
+   (`--write` なしの `guard sync` は policy が **現在** 固定しているタグを基準にした
+   dry-run で、bump の予見にはならない)
 3. CIの `guard lint` が新標準への適合を検証。適合できない箇所は期限付きexemptionで猶予管理
 
 ## リモート取得の仕様
