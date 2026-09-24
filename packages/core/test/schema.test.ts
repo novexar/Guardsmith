@@ -94,6 +94,33 @@ describe("policy schema", () => {
     }
   });
 
+  it("accepts check: drift3 and rejects allow_sections on it", () => {
+    const rule = (extra: Record<string, unknown> = {}) => ({
+      id: "drift/standards-sync",
+      severity: "warn",
+      check: "drift3",
+      with: {
+        source: "github:novexar/guardsmith//standards@v0.7.0",
+        paths: ["CLAUDE.md", "docs/**/*.md"],
+        ...extra,
+      },
+    });
+    expect(bad({ rules: [rule()] }).ok).toBe(true);
+    // 3-way に allow_sections は無い(節単位モードとの取り違えを parse エラーにする)
+    expect(bad({ rules: [rule({ allow_sections: ["## PJ固有手順"] })] }).ok).toBe(false);
+    // タグ固定は drift と同じく必須
+    expect(
+      bad({
+        rules: [
+          {
+            ...rule(),
+            with: { source: "github:novexar/guardsmith//standards", paths: ["CLAUDE.md"] },
+          },
+        ],
+      }).ok,
+    ).toBe(false);
+  });
+
   it("accepts pinned github extends and file drift source", () => {
     const r = bad({
       extends: ["github:novexar/guardsmith//presets/baseline.yaml@v0.1.0"],
@@ -126,6 +153,7 @@ describe("strict rejection of unknown keys (all checks)", () => {
     frontmatter: { paths: [".claude/agents/*.md"], required: ["name"] },
     "json-path": { path: "x.json", assert: [{ query: "$.a", op: "exists" }] },
     drift: { source: "file:./master", paths: [".claude/skills/**"] },
+    drift3: { source: "file:./master", paths: ["CLAUDE.md"] },
     "secret-scan": { paths: ["CLAUDE.md"] },
   };
 

@@ -9,7 +9,7 @@
  * また node-diff3 は EOL を一切正規化しない。ours の EOL を検出し、LF で計算して
  * 元の EOL で join し直す(マーカー行だけ LF になるのを防ぐ)。
  */
-import { diff3Merge, mergeDiff3, type MergeRegion } from "node-diff3";
+import { diff3Merge, diffIndices, mergeDiff3, type MergeRegion } from "node-diff3";
 
 export type Eol = "\n" | "\r\n";
 
@@ -111,4 +111,21 @@ export function detectEol(text: string): Eol {
  */
 export function toLines(text: string): string[] {
   return text.replaceAll("\r\n", "\n").split("\n");
+}
+
+/** 2 バッファ間の不一致チャンク(一致部分は LCS で対応付け済み) */
+export interface DiffChunk {
+  left: string[];
+  right: string[];
+}
+
+/**
+ * 不一致チャンクだけを取り出す(`--init-vars` の行対応付け用)。
+ * node-diff3 の呼び出しを本ファイルへ封じ込める制約は 3-way と同じ理由で共通。
+ */
+export function diffChunks(left: readonly string[], right: readonly string[]): DiffChunk[] {
+  return diffIndices<string>([...left], [...right]).map((r) => ({
+    left: [...r.buffer1Content],
+    right: [...r.buffer2Content],
+  }));
 }

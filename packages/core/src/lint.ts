@@ -14,6 +14,7 @@ import {
   checkJsonPath,
   checkDrift,
 } from "./checks.js";
+import { checkDrift3, type Drift3Context } from "./drift3.js";
 
 /* ---------- 結果モデル ---------- */
 
@@ -36,8 +37,17 @@ export interface LintResult {
 }
 
 /* ---------- secret-scan 既定パターン ---------- */
-/** 誤検知を抑えるため「値の形が資格情報らしい」ものに限定(キー名だけでは検知しない) */
-const DEFAULT_SECRET_PATTERNS: { name: string; re: RegExp }[] = [
+
+export interface SecretPattern {
+  name: string;
+  re: RegExp;
+}
+
+/**
+ * 誤検知を抑えるため「値の形が資格情報らしい」ものに限定(キー名だけでは検知しない)。
+ * `guard sync --init-vars` も同じパターンで推定値を検査する(R6: vars はコミット対象)。
+ */
+export const DEFAULT_SECRET_PATTERNS: readonly SecretPattern[] = [
   { name: "AWS access key", re: /\bAKIA[0-9A-Z]{16}\b/ },
   { name: "Private key block", re: /-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----/ },
   { name: "GitHub token", re: /\bgh[pousr]_[A-Za-z0-9]{36,}\b/ },
@@ -54,6 +64,8 @@ const DEFAULT_SECRET_PATTERNS: { name: string; re: RegExp }[] = [
 export interface LintOptions {
   /** ローカルの .gitignore を尊重するか(既定 true)。false で全走査に戻す */
   gitignore?: boolean;
+  /** drift3 の 3-way 文脈(旧・新マスターと vars)。未指定なら節単位比較へ退避する */
+  drift3?: Drift3Context;
 }
 
 export async function runLint(
@@ -69,7 +81,7 @@ export async function runLint(
   });
   const raw: Finding[] = [];
   for (const rule of policy.rules) {
-    raw.push(...(await runRule(rule, rootDir, scope)));
+    raw.push(...(await runRule(rule, rootDir, scope, options)));
   }
   const findings = applyExemptions(raw, policy.exemptions, now);
 
@@ -81,7 +93,12 @@ export async function runLint(
   return { findings, ok: stats.error === 0, stats };
 }
 
-async function runRule(rule: Rule, root: string, scope: GlobScope): Promise<Finding[]> {
+async function runRule(
+  rule: Rule,
+  root: string,
+  scope: GlobScope,
+  options: LintOptions,
+): Promise<Finding[]> {
   switch (rule.check) {
     case "file-exists":
       return checkFileExists(rule, scope, rule.with.paths);
@@ -101,6 +118,8 @@ async function runRule(rule: Rule, root: string, scope: GlobScope): Promise<Find
       return checkJsonPath(rule, root);
     case "drift":
       return checkDrift(rule, root, scope);
+    case "drift3":
+      return checkDrift3(rule, root, scope, options.drift3);
   }
 }
 

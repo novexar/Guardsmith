@@ -65,24 +65,42 @@ export function withStandardsTag(doc: Readonly<VarsDocument>, tag: string): Vars
   return { version: doc.version, standards: tag, vars: { ...doc.vars } };
 }
 
+export interface SerializeVarsOptions {
+  /** 先頭の説明コメントに続けて出す行(`# ` は付けずに渡す) */
+  header?: readonly string[];
+  /** キーの直前に出すコメント行(`--init-vars` の候補並記など) */
+  keyNotes?: Readonly<Record<string, readonly string[]>>;
+}
+
 /** 先頭に説明コメント付きで書き出す(キーは昇順、キー・値は必ずクォート) */
-export function writeVars(rootDir: string, doc: Readonly<VarsDocument>): void {
-  writeFileSync(join(rootDir, VARS_FILENAME), serializeVars(doc));
+export function writeVars(
+  rootDir: string,
+  doc: Readonly<VarsDocument>,
+  opts: Readonly<SerializeVarsOptions> = {},
+): void {
+  writeFileSync(join(rootDir, VARS_FILENAME), serializeVars(doc, opts));
 }
 
 /** writeVars が書き出す YAML テキスト */
-export function serializeVars(doc: Readonly<VarsDocument>): string {
+export function serializeVars(
+  doc: Readonly<VarsDocument>,
+  opts: Readonly<SerializeVarsOptions> = {},
+): string {
   const lines = [
     `# ${VARS_FILENAME} — standards テンプレートの置換値(コミット対象)`,
     "# 値は PM が確認して確定すること。TODO が残っている間 guard bump は失敗する。",
     "# 秘密情報(APIキー・パスワード・トークン)は絶対に書かない。",
+    ...(opts.header ?? []).map((l) => `# ${l}`),
     `version: ${doc.version}`,
     `standards: ${quote(doc.standards)}`,
     "vars:",
   ];
   const keys = Object.keys(doc.vars).sort();
   if (keys.length === 0) lines[lines.length - 1] = "vars: {}";
-  for (const key of keys) lines.push(`  ${quote(key)}: ${quote(doc.vars[key])}`);
+  for (const key of keys) {
+    for (const note of opts.keyNotes?.[key] ?? []) lines.push(`  # ${note}`);
+    lines.push(`  ${quote(key)}: ${quote(doc.vars[key])}`);
+  }
   return `${lines.join("\n")}\n`;
 }
 
