@@ -58,7 +58,24 @@ export const DriftSource = z.union([
 ]);
 
 const NonEmpty = z.string().min(1);
-const Paths = z.array(NonEmpty).min(1);
+
+/**
+ * 走査パターンに `..` セグメントを許さない。
+ * `guard sync` はマッチしたパスへ**書き込む**ため、`../**\/*.md` のようなパターンは
+ * リポジトリ外への書き込み経路になる。policy は remote extends から継承されうるので、
+ * 上流の差し替えで PJ 外を書かれないようスキーマの段階で落とす。
+ * 先頭 `!` の否定パターンは除外指定なので `!` を外して判定する。
+ */
+function hasParentSegment(pattern: string): boolean {
+  const body = pattern.startsWith("!") ? pattern.slice(1) : pattern;
+  return body.split(/[\\/]/).includes("..");
+}
+
+const PathPattern = NonEmpty.refine((p) => !hasParentSegment(p), {
+  message: "path pattern must not contain a '..' segment (it would escape the repository root)",
+});
+
+const Paths = z.array(PathPattern).min(1);
 
 /* ---------- ルール共通フィールド ---------- */
 

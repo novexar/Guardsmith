@@ -8,6 +8,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { containedJoin } from "./remote.js";
 import { createGlobScope, globFiles } from "./glob.js";
 import { normalizeEol, splitSections } from "./checks.js";
 import type { PolicyDocument } from "./schema.js";
@@ -69,7 +70,7 @@ export async function planSync(
     for (const file of masterFiles) {
       // EOL(CRLF/LF)差は drift 検査と同様に差分とみなさない
       const master = normalizeEol(readFileSync(join(srcRoot, file), "utf8"));
-      const localPath = join(rootDir, file);
+      const localPath = projectPath(rootDir, file);
       if (!existsSync(localPath)) {
         actions.push({ file, kind: "create", sections: [], content: master });
         continue;
@@ -93,9 +94,22 @@ export async function planSync(
 /** 計画を実ファイルへ適用する */
 export function applySync(plan: SyncPlan, rootDir: string): void {
   for (const a of plan.actions) {
-    const path = join(rootDir, a.file);
+    const path = projectPath(rootDir, a.file);
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, a.content);
+  }
+}
+
+/**
+ * glob の結果を PJ ルート配下に封じ込める(sync3.ts と同じ理由)。
+ * `paths: ["../**\/*.md"]` のようなパターンに対し fast-glob は cwd 外の相対パスを返し、
+ * 素の join だとリポジトリ外へ書ける。policy は remote extends から継承されうる。
+ */
+function projectPath(rootDir: string, file: string): string {
+  try {
+    return containedJoin(rootDir, file);
+  } catch {
+    throw new Error(`refusing to touch '${file}': it resolves outside the project root`);
   }
 }
 

@@ -9,12 +9,13 @@
  * 衝突時の既定は D6 に従い **1 ファイルも書かない**(部分適用で中途半端な作業ツリーを
  * 残さない)。`conflictMarkers` のときだけマーカー入りで書き、基準タグは進めない。
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { containedJoin } from "./remote.js";
 import { createGlobScope, globFiles, type GlobScope } from "./glob.js";
 import { detectEol, merge3, type ConflictRegion } from "./merge3.js";
 import { STAMP_RE, normalizeMaster, stampFor } from "./normalize.js";
-import { updateStandardsTag, type VarsDocument } from "./vars.js";
+import { pendingVars, updateStandardsTag, VARS_FILENAME, type VarsDocument } from "./vars.js";
 
 export type Sync3Kind =
   | "merge" // クリーンに適用できる
@@ -138,12 +139,40 @@ export function applySync3(
   if (plan.conflicted.length > 0) {
     // markers 指定時は衝突していないファイルも書く(指定したのに全て無変更、を避ける)。
     // ただし未解決が残る以上、基準タグとスタンプは進めない
-    if (plan.conflictMarkers) for (const a of writable) writeAction(rootDir, a);
+    if (plan.conflictMarkers) writeAll(rootDir, writable);
     return;
   }
-  for (const a of writable) writeAction(rootDir, a);
+  writeAll(rootDir, writable);
   updateStandardsTag(rootDir, vars, plan.nextTag);
   ensureStamp(rootDir, plan.nextTag);
+}
+
+/**
+ * 書き込み前の安全確認。未確定の置換値が 1 つでもあれば書かせない。
+ *
+ * dry-run と `guard lint` は info で報告するだけ(U6)だが、**書き込み**は別で、
+ * `TODO` や未登録キーが残ったまま `create` すると標準テンプレートの文言が
+ * そのまま PJ へ流し込まれ、しかも基準タグだけが進んでしまう。
+ * `guard sync --write` と `guard bump` の両方で必ず通すこと。
+ */
+export function varsBlockingWrite(
+  plan: Readonly<Sync3Plan>,
+  vars: Readonly<VarsDocument>,
+): string | null {
+  const todo = pendingVars(vars);
+  const unresolved = [...new Set(plan.actions.flatMap((a) => a.unresolvedVars))].sort();
+  if (todo.length === 0 && unresolved.length === 0) return null;
+  const parts: string[] = [];
+  if (todo.length > 0) {
+    parts.push(`${todo.length} value(s) still set to TODO: ${todo.join(", ")}`);
+  }
+  if (unresolved.length > 0) {
+    parts.push(`${unresolved.length} placeholder(s) missing from vars: ${unresolved.join(", ")}`);
+  }
+  return (
+    `${VARS_FILENAME} is incomplete — ${parts.join("; ")}\n` +
+    "fill them in before writing (an unresolved value would be written into the project)"
+  );
 }
 
 /** dry-run / 適用結果の表示 */
@@ -171,7 +200,7 @@ function planFile(
   vars: Readonly<Record<string, string>>,
   options: Readonly<Sync3Options>,
 ): Sync3Action | null {
-  const localPath = join(rootDir, file);
+  const localPath = projectPath(rootDir, file);
   const hasLocal = existsSync(localPath);
   const headPath = join(source.headRoot, file);
   if (!existsSync(headPath)) {
@@ -307,12 +336,49 @@ async function scopeFor(cache: Map<string, GlobScope>, root: string): Promise<Gl
 
 /* ---------- 適用 ---------- */
 
-function writeAction(rootDir: string, action: Readonly<Sync3Action>): void {
-  // content 無しを空ファイルで上書きしない(呼び出し側の絞り込みが緩んでも壊れないように)
-  if (action.content === undefined) return;
-  const path = join(rootDir, action.file);
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, action.content);
+/** 一時ファイルの接尾辞。2 相適用の途中結果であることが名前で分かるようにする */
+const TMP_SUFFIX = ".guardsmith.tmp";
+
+/**
+ * glob の結果を PJ ルート配下に封じ込める。
+ * `paths: ["../**\/*.md"]` のようなパターンに対し fast-glob は cwd 外の相対パスを返し、
+ * 素の join だとリポジトリ外へ書ける。policy は remote extends から継承されうるため、
+ * スキーマ(Paths の `..` 拒否)と合わせて実行時にも必ず検査する。
+ */
+function projectPath(rootDir: string, file: string): string {
+  try {
+    return containedJoin(rootDir, file);
+  } catch {
+    throw new Error(`refusing to touch '${file}': it resolves outside the project root`);
+  }
+}
+
+/**
+ * 2 相適用。全対象を一時ファイルへ書き切ってから rename で確定する。
+ * 途中の I/O 失敗で「N-1 件だけ適用済み・タグは旧のまま」という状態を残さないため
+ * (rename は同一ディレクトリ内であれば実質アトミック)。
+ */
+function writeAll(rootDir: string, actions: readonly Sync3Action[]): void {
+  const staged: { tmp: string; final: string }[] = [];
+  try {
+    for (const action of actions) {
+      // content 無しを空ファイルで上書きしない(呼び出し側の絞り込みが緩んでも壊れないように)
+      if (action.content === undefined) continue;
+      const final = projectPath(rootDir, action.file);
+      mkdirSync(dirname(final), { recursive: true });
+      const tmp = `${final}${TMP_SUFFIX}`;
+      writeFileSync(tmp, action.content);
+      staged.push({ tmp, final });
+    }
+  } catch (e) {
+    const pending = staged.map((s) => s.final);
+    for (const s of staged) rmSync(s.tmp, { force: true });
+    throw new Error(
+      `${(e as Error).message}\nnothing was applied` +
+        (pending.length > 0 ? ` (${pending.length} staged file(s) discarded)` : ""),
+    );
+  }
+  for (const s of staged) renameSync(s.tmp, s.final);
 }
 
 /** U3: PJ がスタンプ行を消していた場合に末尾へ追記する fallback */
