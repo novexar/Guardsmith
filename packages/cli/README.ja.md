@@ -43,8 +43,11 @@ npx @guardsmith/cli init
 npx @guardsmith/cli lint
 
 # 標準更新で何が変わるかを表示し、取り込む
-npx @guardsmith/cli sync                # dry-run(衝突があれば exit 1)
-npx @guardsmith/cli bump v0.7.0         # 適用 + extends タグと vars ファイルの更新
+npx @guardsmith/cli bump v0.7.1 --dry-run   # 新タグでの dry-run(衝突があれば exit 1)
+npx @guardsmith/cli bump v0.7.1             # 適用 + extends タグと vars ファイルの更新
+
+# 現在固定しているタグでの未適用分の確認(bump の予見にはならない)
+npx @guardsmith/cli sync
 
 # guardsmith.vars.yaml がまだ無い既存 PJ は先に生成する
 npx @guardsmith/cli sync --init-vars
@@ -54,15 +57,15 @@ npx @guardsmith/cli explain claude-md/thin-diff
 npx @guardsmith/cli version
 ```
 
-| コマンド                  | 主なフラグ                                                                                           |
-| ------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `guard new <dir>`         | —                                                                                                    |
-| `guard init`              | —                                                                                                    |
-| `guard lint`              | `--root`、`--policy`、`--format console\|sarif\|json`、`--out`、`--no-cache`、`--no-gitignore`       |
-| `guard sync`              | `--root`、`--policy`、`--write`、`--no-cache`、`--no-gitignore`、`--conflict-markers`、`--init-vars` |
-| `guard bump <tag>`        | `--root`、`--policy`、`--repo <owner>/<repo>`、`--no-cache`、`--no-gitignore`、`--conflict-markers`  |
-| `guard explain <rule-id>` | —                                                                                                    |
-| `guard version`           | —                                                                                                    |
+| コマンド                  | 主なフラグ                                                                                                       |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `guard new <dir>`         | —                                                                                                                |
+| `guard init`              | —                                                                                                                |
+| `guard lint`              | `--root`、`--policy`、`--format console\|sarif\|json`、`--out`、`--no-cache`、`--no-gitignore`                   |
+| `guard sync`              | `--root`、`--policy`、`--write`、`--no-cache`、`--no-gitignore`、`--conflict-markers`、`--init-vars`             |
+| `guard bump <tag>`        | `--root`、`--policy`、`--repo <owner>/<repo>`、`--dry-run`、`--no-cache`、`--no-gitignore`、`--conflict-markers` |
+| `guard explain <rule-id>` | —                                                                                                                |
+| `guard version`           | —                                                                                                                |
 
 `guard sync` / `guard bump` は標準リリースを **3-way マージ**で取り込みます。PJ が乗っている
 タグのマスターが base、新タグのマスターが theirs、PJ リポジトリが ours なので、PJ 固有の記述は
@@ -70,6 +73,11 @@ npx @guardsmith/cli version
 残ります(`--conflict-markers` を付けると `<<<<<<<` / `|||||||` / `=======` / `>>>>>>>` マーカー
 入りで書き出します)。どちらも終了コードは、衝突なしで `0`、1 ファイルでも衝突すれば `1`
 (このとき `guard bump` は policy を含め何も書きません)、実行エラーは `2` です。
+
+`guard bump <tag> --dry-run` は同じ計画・衝突予測・policy の書き換え予定行を表示し、
+1 バイトも書かずに本番と同じ終了コードを返します。**新しい**タグでの差分を事前に見られるのは
+この dry-run だけです(`--write` なしの `guard sync` は policy が **現在** 固定しているタグを
+基準にした dry-run です)。`--dry-run` と `--conflict-markers` は併用できません。
 
 マージが読む PJ のプレースホルダ置換値は `guardsmith.vars.yaml`(PJ ルート・コミット対象・
 秘密情報は書かない)にあります。`guard new` が雛形を生成し、既存 PJ は
@@ -103,9 +111,9 @@ npx @guardsmith/cli version
 version: 1
 target: claude-code
 extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v0.7.0 # タグ固定は必須
+  - github:novexar/guardsmith//presets/baseline.yaml@v0.7.1 # タグ固定は必須
   # フロントエンドを持つプロジェクトはさらに:
-  # - github:novexar/guardsmith//presets/frontend.yaml@v0.7.0
+  # - github:novexar/guardsmith//presets/frontend.yaml@v0.7.1
 ignore: [] # 全走査から除外する glob(extends 間で連結される)
 rules: [] # 追加・上書き(同じ id の再定義=上書き)
 exemptions: [] # 期限付き例外(reason + approved_by + expires 必須)
@@ -122,7 +130,7 @@ GitHub の外に出ることはありません。期限切れの例外(exemption
 workflow に 1 行追加:
 
 ```yaml
-- uses: novexar/Guardsmith@v0.7.0
+- uses: novexar/Guardsmith@v0.7.1
 ```
 
 違反した PR はサマリコメントと SARIF レポート付きで失敗します。閉域網などの環境では

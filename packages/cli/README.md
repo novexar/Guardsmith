@@ -43,8 +43,11 @@ npx @guardsmith/cli init
 npx @guardsmith/cli lint
 
 # Show what a standards update would change, then take it in
-npx @guardsmith/cli sync                # dry-run (exit 1 = something conflicts)
-npx @guardsmith/cli bump v0.7.0         # apply + move the extends tags and the vars file
+npx @guardsmith/cli bump v0.7.1 --dry-run   # dry-run for the new tag (exit 1 = something conflicts)
+npx @guardsmith/cli bump v0.7.1             # apply + move the extends tags and the vars file
+
+# Dry-run at the tag the policy currently pins (does not predict a bump)
+npx @guardsmith/cli sync
 
 # Existing project with no guardsmith.vars.yaml yet — generate it first
 npx @guardsmith/cli sync --init-vars
@@ -54,15 +57,15 @@ npx @guardsmith/cli explain claude-md/thin-diff
 npx @guardsmith/cli version
 ```
 
-| Command                   | Key flags                                                                                            |
-| ------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `guard new <dir>`         | —                                                                                                    |
-| `guard init`              | —                                                                                                    |
-| `guard lint`              | `--root`, `--policy`, `--format console\|sarif\|json`, `--out`, `--no-cache`, `--no-gitignore`       |
-| `guard sync`              | `--root`, `--policy`, `--write`, `--no-cache`, `--no-gitignore`, `--conflict-markers`, `--init-vars` |
-| `guard bump <tag>`        | `--root`, `--policy`, `--repo <owner>/<repo>`, `--no-cache`, `--no-gitignore`, `--conflict-markers`  |
-| `guard explain <rule-id>` | —                                                                                                    |
-| `guard version`           | —                                                                                                    |
+| Command                   | Key flags                                                                                                        |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `guard new <dir>`         | —                                                                                                                |
+| `guard init`              | —                                                                                                                |
+| `guard lint`              | `--root`, `--policy`, `--format console\|sarif\|json`, `--out`, `--no-cache`, `--no-gitignore`                   |
+| `guard sync`              | `--root`, `--policy`, `--write`, `--no-cache`, `--no-gitignore`, `--conflict-markers`, `--init-vars`             |
+| `guard bump <tag>`        | `--root`, `--policy`, `--repo <owner>/<repo>`, `--dry-run`, `--no-cache`, `--no-gitignore`, `--conflict-markers` |
+| `guard explain <rule-id>` | —                                                                                                                |
+| `guard version`           | —                                                                                                                |
 
 `guard sync` and `guard bump` take a standards release in as a **three-way merge**: the
 master at the tag the project sits on is the base, the master at the new tag is theirs, and
@@ -71,6 +74,12 @@ the standards change overlap is reported as a **conflict** and left untouched
 (`--conflict-markers` writes it out with `<<<<<<<` / `|||||||` / `=======` / `>>>>>>>`
 markers instead). Both exit `0` with no conflicts, `1` when anything conflicts — `guard bump`
 then writes nothing at all, not even the policy — and `2` on a run-time error.
+
+`guard bump <tag> --dry-run` prints the same plan, the predicted conflicts and the policy
+lines it would rewrite, writes nothing, and returns the exit code the real run would. It is
+the only way to see a **new** tag's diff up front: `guard sync` without `--write` is a
+dry-run against the tag the policy **currently** pins. `--dry-run` cannot be combined with
+`--conflict-markers`.
 
 The merge reads the project's placeholder substitutions from `guardsmith.vars.yaml`
 (project root, committed, no secrets). `guard new` writes the skeleton; an existing project
@@ -105,9 +114,9 @@ is genuinely complete.
 version: 1
 target: claude-code
 extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v0.7.0 # tag pinning is mandatory
+  - github:novexar/guardsmith//presets/baseline.yaml@v0.7.1 # tag pinning is mandatory
   # Projects with a frontend also add:
-  # - github:novexar/guardsmith//presets/frontend.yaml@v0.7.0
+  # - github:novexar/guardsmith//presets/frontend.yaml@v0.7.1
 ignore: [] # globs excluded from every scan (concatenated across extends layers)
 rules: [] # add or override (redefining an id overrides it)
 exemptions: [] # time-boxed waivers: reason + approved_by + expires required
@@ -124,7 +133,7 @@ Add one line to your workflow using the
 [GuardSmith Lint Action](https://github.com/marketplace/actions/guardsmith-lint):
 
 ```yaml
-- uses: novexar/Guardsmith@v0.7.0
+- uses: novexar/Guardsmith@v0.7.1
 ```
 
 Violating PRs fail with a summary comment and a SARIF report. Air-gapped environments can

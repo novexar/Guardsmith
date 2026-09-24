@@ -37,6 +37,7 @@ GuardSmith treats AI development standards the way ESLint treats code style —
   while preserving the sections each project is allowed to customize
 - **Keep up** — `guard bump <tag>` takes a new standards release in as a **three-way merge**:
   project-specific wording survives, and only a genuine collision is reported as a conflict
+  (`--dry-run` shows the plan for the new tag before anything is written)
 - **Enforce in CI** — the [GuardSmith Lint Action](https://github.com/marketplace/actions/guardsmith-lint)
   fails violating PRs, posts a summary comment, and emits SARIF
 - **Layer** — `extends: github:owner/repo[//path]@tag` composes OSS baseline →
@@ -86,7 +87,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: novexar/Guardsmith@v0.7.0
+      - uses: novexar/Guardsmith@v0.7.1
 ```
 
 | Input              | Default                   | Description                                                                                                         |
@@ -105,7 +106,7 @@ A self-contained bundle (all dependencies included) is attached to every
 Node.js 20+ are required — the npm registry is never contacted:
 
 ```bash
-gh release download v0.7.0 --repo novexar/Guardsmith --pattern 'guardsmith-cli-*.tar.gz'
+gh release download v0.7.1 --repo novexar/Guardsmith --pattern 'guardsmith-cli-*.tar.gz'
 tar -xzf guardsmith-cli-*.tar.gz
 node guardsmith-cli/guard.mjs lint
 ```
@@ -121,9 +122,9 @@ A project policy is a few lines of YAML with pinned remote references:
 version: 1
 target: claude-code
 extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v0.7.0
+  - github:novexar/guardsmith//presets/baseline.yaml@v0.7.1
   # Projects with a frontend also add:
-  # - github:novexar/guardsmith//presets/frontend.yaml@v0.7.0
+  # - github:novexar/guardsmith//presets/frontend.yaml@v0.7.1
 ignore: [] # globs excluded from every scan (concatenated across extends layers)
 rules: [] # add or override rules (redefining an id overrides it)
 exemptions: [] # time-boxed waivers: reason + approved_by + expires required
@@ -145,8 +146,8 @@ exemptions: [] # time-boxed waivers: reason + approved_by + expires required
 A new standards release is taken in with two commands:
 
 ```bash
-guard sync          # dry-run: what the new release would change, and where it collides
-guard bump v0.7.0   # apply it, and move the extends tags along with it
+guard bump v0.7.1 --dry-run   # dry-run: what the new tag would change, and where it collides
+guard bump v0.7.1             # apply it, and move the extends tags along with it
 ```
 
 The master at the tag the project currently sits on (`standards` in
@@ -156,10 +157,15 @@ between the two is applied to your files as a **three-way merge**: the old maste
 base, the new master is theirs, your repository is ours. Everything the project wrote for
 itself survives. Only a place where a section _you_ rewrote and a section the _standards_
 changed overlap becomes a **conflict**, and a conflicting file is listed and left
-untouched — never silently overwritten. `guard sync` exits `0` when everything applies
-cleanly, `1` when anything conflicts and `2` on a run-time error; `--conflict-markers`
-writes the conflicting files out with `<<<<<<<` / `|||||||` / `=======` / `>>>>>>>`
-markers instead of leaving them alone (the exit code stays `1`).
+untouched — never silently overwritten. `guard bump --dry-run` writes nothing at all and
+exits `0` when the tag can be taken in cleanly, `1` when anything conflicts and `2` on a
+run-time error, so the plan you see is the plan that will be applied. `--conflict-markers`
+(apply only) writes the conflicting files out with `<<<<<<<` / `|||||||` / `=======` /
+`>>>>>>>` markers instead of leaving them alone; the exit code stays `1`.
+
+`guard sync` without `--write` is a dry-run too, but it compares against the tag the policy
+**currently** pins, so it shows what is still unapplied at that tag — it cannot predict a
+bump to a newer tag. Use `guard bump <tag> --dry-run` for that.
 
 #### `guardsmith.vars.yaml`
 
@@ -169,7 +175,7 @@ dictionary lives at the project root and is **committed**:
 ```yaml
 # guardsmith.vars.yaml
 version: 1
-standards: v0.7.0 # the master tag this project currently sits on
+standards: v0.7.1 # the master tag this project currently sits on
 vars:
   PROJECT_NAME: "BizCore"
   ORG/REPO: "novexar/bizcore"
@@ -195,7 +201,7 @@ without anyone running `sync`:
   severity: warn
   check: drift3
   with:
-    source: github:novexar/guardsmith//standards@v0.7.0 # new master (tag pinning is mandatory)
+    source: github:novexar/guardsmith//standards@v0.7.1 # new master (tag pinning is mandatory)
     paths: ["CLAUDE.md", "DESIGN.md", "docs/**/*.md", ".claude/agents/**/*.md"]
 ```
 
@@ -295,26 +301,26 @@ audit keeps working on projects that keep `.claude/settings.json` local. Use
 
 ## Commands
 
-| Command                   | Description                                                                                                                                                                                                                                                       |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `guard new <dir>`         | Scaffold a new project from the standards master (writes a `guardsmith.vars.yaml` skeleton)                                                                                                                                                                       |
-| `guard init`              | Generate `guard.policy.yaml` in the current directory                                                                                                                                                                                                             |
-| `guard lint`              | Verify. `--format sarif\|json`, `--out <file>`, `--no-cache`, `--no-gitignore`, `--root <dir>`                                                                                                                                                                    |
-| `guard sync`              | Dry-run of the standards update; `--write` applies it, `--conflict-markers` writes conflicts out, `--init-vars` generates `guardsmith.vars.yaml`, `--no-gitignore`. Exit `0` / `1` conflicts / `2` error. Section-level repair for policies with no `drift3` rule |
-| `guard bump <tag>`        | Take a standards release in: rewrite the `extends` tags, merge, update `guardsmith.vars.yaml` and the `CLAUDE.md` stamp. `--repo <owner>/<repo>`, `--conflict-markers`. Exit `0` / `1` conflicts (nothing written) / `2` error                                    |
-| `guard explain <rule-id>` | Explain a rule                                                                                                                                                                                                                                                    |
-| `guard version`           | Show CLI and standards versions                                                                                                                                                                                                                                   |
+| Command                   | Description                                                                                                                                                                                                                                                                   |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `guard new <dir>`         | Scaffold a new project from the standards master (writes a `guardsmith.vars.yaml` skeleton)                                                                                                                                                                                   |
+| `guard init`              | Generate `guard.policy.yaml` in the current directory                                                                                                                                                                                                                         |
+| `guard lint`              | Verify. `--format sarif\|json`, `--out <file>`, `--no-cache`, `--no-gitignore`, `--root <dir>`                                                                                                                                                                                |
+| `guard sync`              | Dry-run of the standards update; `--write` applies it, `--conflict-markers` writes conflicts out, `--init-vars` generates `guardsmith.vars.yaml`, `--no-gitignore`. Exit `0` / `1` conflicts / `2` error. Section-level repair for policies with no `drift3` rule             |
+| `guard bump <tag>`        | Take a standards release in: rewrite the `extends` tags, merge, update `guardsmith.vars.yaml` and the `CLAUDE.md` stamp. `--dry-run` shows the plan and writes nothing, `--repo <owner>/<repo>`, `--conflict-markers`. Exit `0` / `1` conflicts (nothing written) / `2` error |
+| `guard explain <rule-id>` | Explain a rule                                                                                                                                                                                                                                                                |
+| `guard version`           | Show CLI and standards versions                                                                                                                                                                                                                                               |
 
 ## Upgrading standards
 
 Existing projects are tag-pinned and keep working untouched. When you are ready to adopt a
 new standards release, follow the step-by-step checklist in
-[docs/migration/v0.7.0.md](docs/migration/v0.7.0.md) — from v0.7.0 catching up is two
-commands (`guard sync`, then `guard bump v0.7.0`).
+[docs/migration/v0.7.1.md](docs/migration/v0.7.1.md) — nothing to do on the project side;
+catching up is two commands (`guard bump v0.7.1 --dry-run`, then `guard bump v0.7.1`).
 Coming from an older release? Apply [v0.5.0](docs/migration/v0.5.0.md),
-[v0.5.1](docs/migration/v0.5.1.md), [v0.5.2](docs/migration/v0.5.2.md) and
-[v0.6.0](docs/migration/v0.6.0.md) first; every release's checklist lives in
-[docs/migration/](docs/migration/).
+[v0.5.1](docs/migration/v0.5.1.md), [v0.5.2](docs/migration/v0.5.2.md),
+[v0.6.0](docs/migration/v0.6.0.md) and [v0.7.0](docs/migration/v0.7.0.md) first; every
+release's checklist lives in [docs/migration/](docs/migration/).
 
 > **CLI version**: the v0.7.0 baseline needs `@guardsmith/cli` **0.6.0 or newer** (it
 > carries the `drift3` check, which an older CLI rejects as unknown under its strict

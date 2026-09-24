@@ -42,7 +42,7 @@ description: マスターテンプレートからコピーされた本リポジ�
 
 ```yaml
 version: 1
-standards: v0.7.0 # 展開元のマスタータグ。CLAUDE.md 末尾スタンプと一致させる
+standards: v0.7.1 # 展開元のマスタータグ。CLAUDE.md 末尾スタンプと一致させる
 vars:
   PROJECT_NAME: "BizCore"
   OWNER: "Novexar"
@@ -77,7 +77,7 @@ vars:
       - github:novexar/guardsmith//presets/frontend.yaml@vX.Y.Z # ← FE を持つ PJ のみ追加
     ```
 
-    - リモート参照はタグ固定(`@vX.Y.Z`)必須。実例: `github:novexar/guardsmith//presets/frontend.yaml@v0.7.0`
+    - リモート参照はタグ固定(`@vX.Y.Z`)必須。実例: `github:novexar/guardsmith//presets/frontend.yaml@v0.7.1`
     - ローカル開発(guardsmith リポジトリ内や CLI 同梱プリセット)では `preset:frontend` と書ける。
     - 検査内容: `DESIGN.md` の存在(`frontend/design-md`)/ shadcn 設定 `components.json` の存在
       (`frontend/shadcn-config`)/ 競合 UI ライブラリ不在(`frontend/no-competing-ui-libs`)/
@@ -112,9 +112,13 @@ vars:
 適用するため、**PJ 固有の記述は上書きされない**。
 
 ```
-guard sync          # dry-run。差分と衝突予測を表示する(ファイルは書かない)
-guard bump v0.7.0   # 取り込み。policy の extends タグと vars の standards も更新する
+guard bump v0.7.1 --dry-run   # dry-run。新タグでの差分と衝突予測を表示する(何も書かない)
+guard bump v0.7.1             # 取り込み。policy の extends タグと vars の standards も更新する
 ```
+
+`--write` なしの `guard sync` も dry-run だが、基準は policy が **現在** 固定しているタグなので、
+「今のタグで未適用のものがあるか」しか分からない。**上げたときの差分を予見できるのは
+`guard bump <tag> --dry-run` だけ**。
 
 `guard bump` は 3-way 取り込みに加えて `.claude/skills/**` の節単位同期も **新タグの
 マスターに対して** 行う。bump の後に `guard sync --write` を別途実行する必要はない。
@@ -129,7 +133,8 @@ guard bump v0.7.0   # 取り込み。policy の extends タグと vars の stand
 | コマンド | フラグ | 終了コード |
 |---|---|---|
 | `guard sync` | `--root <dir>` / `--policy <file>` / `--write` / `--no-cache` / `--no-gitignore` / `--conflict-markers` / `--init-vars` / `--allow-downgrade` | 0 = 衝突なし(dry-run 含む)/ 1 = 衝突あり / 2 = 実行エラー・`--write` で vars 未完成・巻き戻し |
-| `guard bump <tag>` | `--root <dir>` / `--policy <file>` / `--repo <owner>/<repo>` / `--no-cache` / `--no-gitignore` / `--conflict-markers` / `--allow-downgrade` | 0 = 適用完了 / 1 = 衝突あり(policy も vars も未変更)/ 2 = 実行エラー・vars 未完成・巻き戻し |
+| `guard bump <tag>` | `--root <dir>` / `--policy <file>` / `--repo <owner>/<repo>` / `--dry-run` / `--no-cache` / `--no-gitignore` / `--conflict-markers` / `--allow-downgrade` | 0 = 適用完了 / 1 = 衝突あり(policy も vars も未変更)/ 2 = 実行エラー・vars 未完成・巻き戻し |
+| `guard bump <tag> --dry-run` | 上記から `--conflict-markers` を除く(併用は usage エラー) | 0 = 適用可能 / 1 = 衝突あり / 2 = 実行エラー・vars 未完成・巻き戻し。いずれも **1 バイトも書かない** |
 
 `guardsmith.vars.yaml` の基準タグが policy の配布タグより**新しい**場合(bump の policy 書き込み
 だけが失敗した、policy を revert した等)、3-way は「新 → 旧」の向きになり標準を巻き戻す。
@@ -139,7 +144,8 @@ guard bump v0.7.0   # 取り込み。policy の extends タグと vars の stand
 
 手順:
 
-1. `guard sync`(dry-run)で差分と衝突予測を確認する。
+1. `guard bump <tag> --dry-run` で新タグの差分と衝突予測を確認する(何も書かない)。
+   `guard sync`(dry-run)は現在のタグでの未適用分の確認であり、bump の予見にはならない。
 2. `guard bump <tag>` を実行する。衝突が無ければ policy・ファイル・vars・スタンプが一括で更新される。
 3. 衝突があると `guard bump` は **policy も vars もファイルも skills も一切書かずに終了コード 1** で
    止まり、衝突ファイルを列挙する。**衝突が出たファイルだけ** PM が内容を確認して解決する
