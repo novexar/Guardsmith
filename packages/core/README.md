@@ -6,7 +6,8 @@
 
 <p align="center">
   The rule engine behind <a href="https://github.com/novexar/Guardsmith">GuardSmith</a> —
-  policy validation, 9 check types, tag-pinned remote resolution, and SARIF output.
+  policy validation, 10 check types, tag-pinned remote resolution, three-way standards
+  merge, and SARIF output.
 </p>
 
 <p align="center">
@@ -24,10 +25,12 @@
 
 - **Policy schema** — strict zod validation of `guard.policy.yaml` / preset YAML
   (unknown keys are rejected; typos become errors)
-- **9 check types** — file-exists / file-absent / content-match / max-lines / import-budget /
-  frontmatter / json-path / drift / secret-scan. `import-budget` measures the resident context
-  of a `CLAUDE.md` including everything its `@path` imports pull in (rough `chars / 4` token
-  estimate; see the [main README](https://github.com/novexar/Guardsmith#claudemd-import-budget))
+- **10 check types** — file-exists / file-absent / content-match / max-lines / import-budget /
+  frontmatter / json-path / drift / drift3 / secret-scan. `import-budget` measures the resident
+  context of a `CLAUDE.md` including everything its `@path` imports pull in (rough `chars / 4`
+  token estimate; see the [main README](https://github.com/novexar/Guardsmith#claudemd-import-budget)).
+  `drift3` (`with: { source, paths }`) reports the standards changes between the project's
+  current tag and the `source` tag that have not been taken in yet
 - **Remote resolution** — `extends: github:owner/repo[//path]@tag` with mandatory tag pinning,
   local caching, multi-level composition, cycle detection, and path-traversal hardening
 - **Scan scope** — `.gitignore` (nested files included) is honoured by default and `.git/`
@@ -66,6 +69,23 @@ winning, while `exemptions` and the top-level `ignore` globs are concatenated), 
 `gitignore` defaults to `true` in both entry points; pass `{ gitignore: false }` for the
 full scan (the CLI's `--no-gitignore`). `runLint`'s third argument is the clock used to
 evaluate exemption expiry, so pass it explicitly when you need reproducible results.
+
+### Three-way standards merge
+
+The machinery behind `guard sync` / `guard bump` is exported as well:
+
+| Export                                              | Summary                                                                                                                                                                                                                   |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `loadVars(rootDir): VarsDocument \| null`           | Reads and validates the project's `guardsmith.vars.yaml` (`{ version, standards, vars }`); `null` when the file is absent, throws when it is malformed                                                                    |
+| `normalizeMaster(text, { vars, stamp? })`           | Renders one master template into the state an initialized project would have — CRLF→LF, `gen:` comments and the uninitialized warning stripped, stamp rewritten, placeholders substituted. Returns `{ text, unresolved }` |
+| `merge3(ours, base, theirs, { markers?, labels? })` | Line-based three-way merge. Returns `{ merged?, conflicts, eol, changed }`; `merged` is absent when there is a conflict and `markers` is off, and the input EOL is restored                                               |
+| `planSync3(sources, rootDir, vars, options?)`       | Builds the `Sync3Plan` (`actions` of kind `merge` / `create` / `conflict` / `skip-deleted` / `removed` / `unchanged`, plus `localOnly`, `conflicted`, `baseTag`, `nextTag`)                                               |
+| `applySync3(plan, rootDir, vars)`                   | Writes the plan out, then moves `guardsmith.vars.yaml` and the `CLAUDE.md` stamp to `nextTag`. Writes **nothing** when the plan has conflicts, unless `conflictMarkers` was set                                           |
+| `formatSync3Plan(plan, write)`                      | Renders the plan for the console (dry-run and applied share one formatter)                                                                                                                                                |
+
+`planSync3` takes one `Drift3Source` per `drift3` rule
+(`{ ruleId, paths, baseRoot, headRoot, baseTag, headTag }`), with both master roots already
+resolved to local directories, so the caller decides how they are fetched.
 
 ## Documentation
 

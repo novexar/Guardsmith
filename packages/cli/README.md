@@ -42,23 +42,40 @@ npx @guardsmith/cli init
 # broken contract headings, leaked credentials, drift, ...)
 npx @guardsmith/cli lint
 
-# Show drift against the standards master, then repair it
-npx @guardsmith/cli sync           # dry-run
-npx @guardsmith/cli sync --write   # restore (project-owned sections are preserved)
+# Show what a standards update would change, then take it in
+npx @guardsmith/cli sync                # dry-run (exit 1 = something conflicts)
+npx @guardsmith/cli bump v0.7.0         # apply + move the extends tags and the vars file
+
+# Existing project with no guardsmith.vars.yaml yet — generate it first
+npx @guardsmith/cli sync --init-vars
 
 # Explain a rule / show versions
 npx @guardsmith/cli explain claude-md/thin-diff
 npx @guardsmith/cli version
 ```
 
-| Command                   | Key flags                                                                                      |
-| ------------------------- | ---------------------------------------------------------------------------------------------- |
-| `guard new <dir>`         | —                                                                                              |
-| `guard init`              | —                                                                                              |
-| `guard lint`              | `--root`, `--policy`, `--format console\|sarif\|json`, `--out`, `--no-cache`, `--no-gitignore` |
-| `guard sync`              | `--root`, `--policy`, `--write`, `--no-cache`, `--no-gitignore`                                |
-| `guard explain <rule-id>` | —                                                                                              |
-| `guard version`           | —                                                                                              |
+| Command                   | Key flags                                                                                            |
+| ------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `guard new <dir>`         | —                                                                                                    |
+| `guard init`              | —                                                                                                    |
+| `guard lint`              | `--root`, `--policy`, `--format console\|sarif\|json`, `--out`, `--no-cache`, `--no-gitignore`       |
+| `guard sync`              | `--root`, `--policy`, `--write`, `--no-cache`, `--no-gitignore`, `--conflict-markers`, `--init-vars` |
+| `guard bump <tag>`        | `--root`, `--policy`, `--repo <owner>/<repo>`, `--no-cache`, `--no-gitignore`, `--conflict-markers`  |
+| `guard explain <rule-id>` | —                                                                                                    |
+| `guard version`           | —                                                                                                    |
+
+`guard sync` and `guard bump` take a standards release in as a **three-way merge**: the
+master at the tag the project sits on is the base, the master at the new tag is theirs, and
+your repository is ours, so project-specific wording survives. A file where your edits and
+the standards change overlap is reported as a **conflict** and left untouched
+(`--conflict-markers` writes it out with `<<<<<<<` / `|||||||` / `=======` / `>>>>>>>`
+markers instead). Both exit `0` with no conflicts, `1` when anything conflicts — `guard bump`
+then writes nothing at all, not even the policy — and `2` on a run-time error.
+
+The merge reads the project's placeholder substitutions from `guardsmith.vars.yaml`
+(project root, committed, no secrets). `guard new` writes the skeleton; an existing project
+generates one with `guard sync --init-vars`. A policy with no `drift3` rule keeps the old
+section-level `guard sync --write` behaviour.
 
 Checks operate on **files that could be committed**: `.gitignore` (nested files included)
 is honoured by default and `.git/` is always excluded, so `secret-scan` never reports a

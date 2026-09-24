@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.7.0
+- init-project に `guardsmith.vars.yaml`(プレースホルダ値の辞書)の記入手順を追加。
+  キーは `{{...}}` の内側の文字列そのまま、値は実際に書き込んだ文字列と一致させる。秘密情報は入れない
+- init-project の自己検証に vars の 3 条件を追加(全プレースホルダが揃っている / `standards` が
+  CLAUDE.md 末尾スタンプと一致 / 秘密情報を含まない)
+- 「マスター更新への追随」を手作業の差分取り込みから `guard bump <tag>`(dry-run は `guard sync`)へ変更。
+  衝突したファイルだけを解決し、`guard sync --write` で再適用する運用にした
+- CLAUDE.md の生成規約 5 に、末尾スタンプが `guardsmith.vars.yaml` の `standards` と同じタグを
+  指すこと(`guard bump` が両方を更新すること)を明記
+
 ## v0.6.0
 - コードレビューを PM から独立 QA(`qa-engineer`)へ移管。QA がコードレビューと受入検証の両方を持つ
 - エンジニアのモデル方針を刷新(backend / db は `opus`、frontend は `sonnet`、qa は `opus` + `effort: high`)

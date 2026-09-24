@@ -79,6 +79,8 @@ exemptions:
 4. トップレベルの `ignore`(glob)も上書きではなく **連結**(宣言順を保ち重複のみ除去)。
    組織 overlay 側の除外が各 PJ に必ず届き、PJ 側から黙って外すことはできない
 5. リモート参照は **タグ固定必須**(`@vX.Y.Z`)。「標準が知らぬ間に変わった」を防ぐ
+6. `guardsmith.vars.yaml` は各 PJ の Layer 3 に属し、上位レイヤーからは **継承しない**。
+   記録している置換値はその PJ 固有のものだから
 
 ## なぜこの分割なのか
 
@@ -95,12 +97,16 @@ exemptions:
 - Layer 1: `standards/` の汎用雛形(CLAUDE.md、agents、skills) — claude-standardsから移植したもの
 - Layer 2: private側に固有テンプレート(例: クライアントA向けagent)を置き、`guard sync` の
   取得元を private に向ける(privateのstandardsはLayer 1をコピーして固有部分を追記した形で維持)
-- Layer 3: 各PJは `guard sync` で配布を受け、`## PJ固有手順` セクションだけ編集(drift検知の許可範囲)
+- Layer 3: 各PJは `guard bump` で配布を受け、PJ 固有の記述は **3-way マージ**で保持される。
+  「PJ が書き換えた節」と「標準が変更した節」が重なったときだけ衝突になり、
+  上書きされるのではなく報告される
 
 ## 運用フロー
 
 1. 標準を改訂 → Layer 1(または2)にコミットし、新タグを打つ(例: v0.3.0)
-2. 各PJの guard.policy.yaml の extends タグを上げるPRを作る(将来: `guard bump` で自動化)
+2. 各PJで `guard sync`(dry-run)→ `guard bump <tag>` を実行する。guard.policy.yaml の
+   `extends` タグ・標準ファイル本体・`guardsmith.vars.yaml` が 1 コマンドで新タグへ進む。
+   結果を PR にする
 3. CIの `guard lint` が新標準への適合を検証。適合できない箇所は期限付きexemptionで猶予管理
 
 ## リモート取得の仕様
