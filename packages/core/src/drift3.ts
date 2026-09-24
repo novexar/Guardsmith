@@ -100,6 +100,18 @@ function summarize(rule: Extract<Rule, { check: "drift3" }>, plan: Sync3Plan): F
       info(rule.id, `${delta} needs manual merge (conflicts in ${plan.conflicted.join(", ")})`),
     );
   }
+  // 未登録の置換値は 3-way の入力そのものを歪める。`guard new` 直後の空 vars が
+  // lint で見えるように、rule の対象範囲で 1 件にまとめて報告する
+  const unresolved = [...new Set(plan.actions.flatMap((a) => a.unresolvedVars))].sort();
+  if (unresolved.length > 0) {
+    findings.push(
+      info(
+        rule.id,
+        `${unresolved.length} placeholder(s) missing from ${VARS_FILENAME}: ` +
+          `${unresolved.join(", ")} — guard sync --write and guard bump refuse to run until filled`,
+      ),
+    );
+  }
   for (const a of plan.actions) {
     if (a.kind === "skip-deleted") {
       findings.push({

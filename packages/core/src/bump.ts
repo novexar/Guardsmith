@@ -9,9 +9,9 @@
  * parse → stringify するとコメント・キー順・引用符が失われるため(R7)。
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { buildDrift3Sources, loadPolicyWithMeta } from "./resolver.js";
-import { applySync3, formatSync3Plan, planSync3 } from "./sync3.js";
-import { TODO_VALUE } from "./initvars.js";
+import { buildDrift3Sources, Drift3PolicyError, loadPolicyWithMeta } from "./resolver.js";
+import { applySync, formatPlan, planSync } from "./sync.js";
+import { applySync3, formatSync3Plan, planSync3, varsBlockingWrite } from "./sync3.js";
 import { loadVars, TAG_RE, VARS_FILENAME } from "./vars.js";
 import type { RemoteOptions } from "./remote.js";
 
@@ -82,36 +82,48 @@ export async function runBump(opts: BumpOptions): Promise<number> {
     console.error(`${VARS_FILENAME} not found — run: guard sync --init-vars`);
     return 2;
   }
-  const todo = Object.entries(vars.vars)
-    .filter(([, v]) => v.trim() === TODO_VALUE)
-    .map(([k]) => k);
-  if (todo.length > 0) {
-    console.error(
-      `${VARS_FILENAME} still has ${todo.length} unresolved value(s): ${todo.join(", ")} — ` +
-        "fill them in before bumping (an unresolved value would be written into the project)",
-    );
-    return 2;
-  }
-
   // ① まだ書かない。衝突したときに作業ツリーを一切変えないため、書き換え結果は保持だけする
   const policyText = readFileSync(policyFile, "utf8");
   const rewrite = rewriteExtendsTag(policyText, slug[1], slug[2], tag);
 
   // ② 新タグのマスターを解決する(policy のタグは headTag で上書きするため、一時ファイルは要らない)
   const { policy, driftOrigins } = await loadPolicyWithMeta(policyFile, opts);
-  const sources = await buildDrift3Sources(policy, driftOrigins, vars.standards, {
-    ...opts,
-    headTag: tag,
-  });
-  if (sources.length === 0) {
-    console.error("no `check: drift3` rule in the effective policy — nothing to bump");
+  let resolved;
+  try {
+    resolved = await buildDrift3Sources(policy, driftOrigins, vars.standards, {
+      ...opts,
+      headTag: tag,
+      repo: opts.repo,
+    });
+  } catch (e) {
+    if (!(e instanceof Drift3PolicyError)) throw e;
+    console.error(e.message);
+    return 2;
+  }
+  for (const s of resolved.skipped) {
+    console.error(
+      `warning: drift3 rule '${s.ruleId}' points at ${s.source} — not bumped ` +
+        `(${VARS_FILENAME} records a single standards tag, so only ${opts.repo} is followed)`,
+    );
+  }
+  if (resolved.sources.length === 0) {
+    console.error(
+      `no \`check: drift3\` rule for ${opts.repo} in the effective policy — nothing to bump`,
+    );
     return 2;
   }
 
-  const plan = await planSync3(sources, rootDir, vars, {
+  const plan = await planSync3(resolved.sources, rootDir, vars, {
     gitignore: opts.gitignore,
     conflictMarkers: opts.conflictMarkers,
   });
+
+  // 未確定の置換値が残っていれば、衝突判定より前に止める(TODO が PJ へ書かれるのを防ぐ)
+  const blocking = varsBlockingWrite(plan, vars);
+  if (blocking !== null) {
+    console.error(blocking);
+    return 2;
+  }
 
   // ③ 衝突: 既定は 1 ファイルも書かない。--conflict-markers のときだけマーカーを書く
   //    (どちらの場合も policy と vars は進めない)
@@ -128,15 +140,25 @@ export async function runBump(opts: BumpOptions): Promise<number> {
     return 1;
   }
 
-  // ④ ファイル → vars/スタンプ → policy の順に書く(policy を最後に回すのは R8)。
+  // ④ 節単位モード(check: drift の skills 同期)も同じコマンドで済ませる。
+  //    bump 後に guard sync --write を別途要求すると、やり忘れで skills だけ旧タグのまま残る
+  const sectionPlan = await planSync(policy, rootDir, { gitignore: opts.gitignore });
+
+  // ⑤ ファイル → vars/スタンプ → policy の順に書く(policy を最後に回すのは R8)。
   //    表示は書き終えてから行う(途中で失敗したときに「適用済み」と出さない)
   applySync3(plan, rootDir, vars);
+  applySync(sectionPlan, rootDir);
   if (rewrite.rewritten.length > 0) writeFileSync(policyFile, rewrite.text);
   console.log(formatSync3Plan(plan, true));
+  if (sectionPlan.actions.length > 0) console.log(formatPlan(sectionPlan, true));
   for (const r of rewrite.rewritten) {
     console.log(`POLICY   ${r.from} → ${r.to}  (${r.line})`);
   }
-  console.log(`bumped standards ${plan.baseTag} → ${tag}`);
+  const merged = plan.actions.filter((a) => a.kind === "merge" || a.kind === "create").length;
+  console.log(
+    `bumped standards ${plan.baseTag} → ${tag}: ` +
+      `${merged} file(s) merged (3-way), ${sectionPlan.actions.length} file(s) restored (sections)`,
+  );
   return 0;
 }
 

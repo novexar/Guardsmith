@@ -24,6 +24,7 @@ import {
   type RemoteOptions,
 } from "./remote.js";
 import { ASSET_ROOT } from "./paths.js";
+import { TAG_RE } from "./vars.js";
 
 export async function loadPolicy(
   policyPath: string,
@@ -168,30 +169,89 @@ export interface ResolvedDrift3Source {
 export interface Drift3ResolveOptions extends RemoteOptions {
   /** 新マスターのタグを上書きする(guard bump <tag>)。省略時は source のタグ */
   headTag?: string;
+  /** タグ追随の対象リポジトリ(`<owner>/<repo>`)。既定 novexar/guardsmith */
+  repo?: string;
 }
+
+/** 対象外にした drift3 ルール(vars は単一タグしか持てないため) */
+export interface SkippedDrift3 {
+  ruleId: string;
+  source: string;
+}
+
+export interface Drift3Resolution {
+  sources: ResolvedDrift3Source[];
+  skipped: SkippedDrift3[];
+}
+
+/** policy の不整合。取得失敗(ネットワーク等)と区別して即座に落とすために型を分ける */
+export class Drift3PolicyError extends Error {}
+
+/** guard bump / drift3 が既定で追随する配布元 */
+export const DEFAULT_STANDARDS_REPO = "novexar/guardsmith";
 
 /**
  * drift3 の元参照から「旧タグ / 新タグ」2 本のマスターを解決する。
  * 旧タグは vars(または CLAUDE.md スタンプ)由来の baseTag。
  * 新タグは source のタグか、opts.headTag の上書き(guard bump)。
+ *
+ * vars が持つ基準タグは **1 本だけ** なので、対象リポジトリ(既定 novexar/guardsmith)を
+ * 指す drift3 のみがタグ追随の対象になる。Layer2 の別リポジトリ標準
+ * (例 `github:novexar/guardsmith-private//standards@v3`)に自分のタグを当てると、
+ * 存在しないタグで失敗するか、最悪 **同名タグの別組織の標準を黙って適用**してしまう。
+ * 対象外のルールは skipped に入れ、呼び出し側が warn を出す。
  */
 export async function buildDrift3Sources(
   policy: PolicyDocument,
   driftOrigins: ReadonlyMap<string, string>,
   baseTag: string,
   opts: Drift3ResolveOptions = {},
-): Promise<ResolvedDrift3Source[]> {
-  const out: ResolvedDrift3Source[] = [];
+): Promise<Drift3Resolution> {
+  const repo = opts.repo ?? DEFAULT_STANDARDS_REPO;
+  const targeted: { ruleId: string; paths: string[]; origin: string }[] = [];
+  const skipped: SkippedDrift3[] = [];
+
   for (const rule of policy.rules) {
     if (rule.check !== "drift3") continue;
     const origin = driftOrigins.get(rule.id) ?? rule.with.source;
-    const pair = await resolveMasterPair(origin, baseTag, opts);
-    out.push({ ruleId: rule.id, paths: [...rule.with.paths], ...pair });
+    if (targetsRepo(origin, repo)) {
+      targeted.push({ ruleId: rule.id, paths: [...rule.with.paths], origin });
+    } else {
+      skipped.push({ ruleId: rule.id, source: origin });
+    }
   }
-  return out;
+  if (targeted.length > 1) {
+    throw new Drift3PolicyError(
+      `drift3 rule for ${repo} must be unique — found ${targeted.length} ` +
+        `(${targeted.map((t) => t.ruleId).join(", ")}); ` +
+        "the project records a single standards tag, so one rule owns it",
+    );
+  }
+
+  const sources: ResolvedDrift3Source[] = [];
+  for (const t of targeted) {
+    const pair = await resolveMasterPair(t.origin, baseTag, opts);
+    sources.push({ ruleId: t.ruleId, paths: t.paths, ...pair });
+  }
+  return { sources, skipped };
 }
 
-/** ruleId → 旧マスターの解決済みディレクトリ(3-way の base 側だけが必要な呼び出し用) */
+/**
+ * source がタグ追随の対象リポジトリを指すか。
+ * `file:` はローカル開発用でリポジトリの概念を持たないため常に対象とする。
+ */
+function targetsRepo(origin: string, repo: string): boolean {
+  if (origin.startsWith("file:")) return true;
+  if (!origin.startsWith("github:")) return false;
+  const gh = parseGithubRef(origin);
+  return `${gh.owner}/${gh.repo}`.toLowerCase() === repo.toLowerCase();
+}
+
+/**
+ * ruleId → 旧マスターの解決済みディレクトリ(3-way の base 側だけが必要な呼び出し用)。
+ * 新タグ側は取得しない(`--init-vars` は旧マスターしか見ないため、不要な tarball 取得で
+ * ネットワーク往復を増やさない)。
+ */
 export async function resolveBaseMasters(
   driftOrigins: ReadonlyMap<string, string>,
   baseTag: string,
@@ -199,8 +259,15 @@ export async function resolveBaseMasters(
 ): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   for (const [ruleId, origin] of driftOrigins) {
-    if (!origin.startsWith("github:") && !origin.startsWith("file:")) continue;
-    out.set(ruleId, (await resolveMasterPair(origin, baseTag, opts)).baseRoot);
+    if (origin.startsWith("file:")) {
+      const dir = parseLocalDriftSource(origin).root(baseTag);
+      if (!existsSync(dir)) {
+        throw new Error(`drift3 source '${origin}': base master not found at ${dir}`);
+      }
+      out.set(ruleId, dir);
+    } else if (origin.startsWith("github:")) {
+      out.set(ruleId, await masterRoot({ ...parseGithubRef(origin), tag: baseTag }, opts));
+    }
   }
   return out;
 }
@@ -250,9 +317,16 @@ async function masterRoot(gh: GithubRef, opts: RemoteOptions): Promise<string> {
  */
 function parseLocalDriftSource(source: string): { root: (tag: string) => string; tag?: string } {
   const body = source.slice("file:".length);
-  const m = /^(.*)@(v[\w.-]+)$/.exec(body);
+  const m = /^(.*)@(v\d+\.\d+\.\d+)$/.exec(body);
   const dir = m ? m[1] : body;
-  return { root: (tag: string) => dir.replaceAll("{tag}", tag), tag: m?.[2] };
+  return {
+    root: (tag: string) => {
+      // タグはパスへ埋め込まれる。`v..` のような値を通すとディレクトリを遡れてしまう
+      if (!TAG_RE.test(tag)) throw new Error(`drift3 source '${source}': invalid tag '${tag}'`);
+      return dir.replaceAll("{tag}", tag);
+    },
+    tag: m?.[2],
+  };
 }
 
 function parseFile(path: string): PolicyDocument {

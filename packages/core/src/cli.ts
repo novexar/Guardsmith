@@ -25,9 +25,15 @@ import type { Drift3Context } from "./drift3.js";
 import { runInitVars } from "./initvars.js";
 import { formatConsole, runLint } from "./lint.js";
 import { ASSET_ROOT } from "./paths.js";
-import { buildDrift3Sources, loadPolicyWithMeta, toSarif } from "./resolver.js";
+import {
+  buildDrift3Sources,
+  Drift3PolicyError,
+  loadPolicyWithMeta,
+  toSarif,
+  type SkippedDrift3,
+} from "./resolver.js";
 import { applySync, formatPlan, planSync } from "./sync.js";
-import { applySync3, formatSync3Plan, planSync3 } from "./sync3.js";
+import { applySync3, formatSync3Plan, planSync3, varsBlockingWrite } from "./sync3.js";
 import { loadVars, resolveBaseTag, VARS_FILENAME, writeVars, type VarsDocument } from "./vars.js";
 import type { PolicyDocument } from "./schema.js";
 
@@ -214,13 +220,27 @@ async function drift3Context(
   if (base === null || vars === null) return { sources: new Map(), vars: null };
   warnStampMismatch(base.stampTag, base.tag);
   try {
-    const sources = await buildDrift3Sources(policy, driftOrigins, base.tag, {
+    const resolved = await buildDrift3Sources(policy, driftOrigins, base.tag, {
       noCache: f.noCache,
+      repo: f.repo,
     });
-    return { sources: new Map(sources.map((s) => [s.ruleId, s])), vars };
+    warnSkippedDrift3(resolved.skipped, f.repo);
+    return { sources: new Map(resolved.sources.map((s) => [s.ruleId, s])), vars };
   } catch (e) {
+    // policy の不整合は検査結果を歪めるので落とす。取得失敗は lint 全体を止めない
+    if (e instanceof Drift3PolicyError) throw e;
     console.error(`warning: could not resolve the standards master: ${(e as Error).message}`);
     return { sources: new Map(), vars };
+  }
+}
+
+/** vars は単一タグしか持てないため、対象リポジトリ以外の drift3 は追随できない */
+function warnSkippedDrift3(skipped: readonly SkippedDrift3[], repo: string): void {
+  for (const s of skipped) {
+    console.error(
+      `warning: drift3 rule '${s.ruleId}' points at ${s.source} — not followed ` +
+        `(${VARS_FILENAME} records a single standards tag, so only ${repo} is tracked)`,
+    );
   }
 }
 
@@ -253,21 +273,26 @@ async function sync(f: Flags): Promise<number> {
   // 持つ policy(baseline v0.7.0 の skills + standards)では両方走る。
   // drift3 だけの policy では節単位の空サマリを出さない(それ以外は従来どおりの出力)。
   const threeWay = policy.rules.some((r) => r.check === "drift3");
-  if (!threeWay || policy.rules.some((r) => r.check === "drift")) {
+  const sections = !threeWay || policy.rules.some((r) => r.check === "drift");
+  if (!threeWay) {
     const plan = await planSync(policy, root, { gitignore: !f.noGitignore });
     if (f.write) applySync(plan, root);
     console.log(formatPlan(plan, f.write));
+    return 0;
   }
-
-  if (!threeWay) return 0;
-  return syncThreeWay(policy, driftOrigins, root, f);
+  return syncThreeWay(policy, driftOrigins, root, f, sections);
 }
 
+/**
+ * 3-way モード。**先に 3-way の計画を作る**のは、衝突があったときに節単位モードの
+ * 適用まで含めて止めるため(「衝突したら何も書かれない」を sync 全体で保証する)。
+ */
 async function syncThreeWay(
   policy: PolicyDocument,
   driftOrigins: ReadonlyMap<string, string>,
   root: string,
   f: Flags,
+  sections: boolean,
 ): Promise<number> {
   const base = resolveBaseTag(root);
   const vars = loadVars(root);
@@ -279,15 +304,38 @@ async function syncThreeWay(
     return 2;
   }
   warnStampMismatch(base.stampTag, base.tag);
-  const sources = await buildDrift3Sources(policy, driftOrigins, base.tag, {
-    noCache: f.noCache,
-  });
-  const plan = await planSync3(sources, root, vars, {
+  let resolved;
+  try {
+    resolved = await buildDrift3Sources(policy, driftOrigins, base.tag, {
+      noCache: f.noCache,
+      repo: f.repo,
+    });
+  } catch (e) {
+    if (!(e instanceof Drift3PolicyError)) throw e;
+    console.error(e.message);
+    return 2;
+  }
+  warnSkippedDrift3(resolved.skipped, f.repo);
+  const plan = await planSync3(resolved.sources, root, vars, {
     gitignore: !f.noGitignore,
     conflictMarkers: f.conflictMarkers,
   });
+
+  // 未確定の置換値が残っているうちは 1 バイトも書かない(TODO の流し込み防止)
+  const blocking = f.write ? varsBlockingWrite(plan, vars) : null;
+  if (blocking !== null) {
+    console.error(blocking);
+    return 2;
+  }
+  const write = f.write && plan.conflicted.length === 0;
+
+  if (sections) {
+    const sectionPlan = await planSync(policy, root, { gitignore: !f.noGitignore });
+    if (write) applySync(sectionPlan, root);
+    console.log(formatPlan(sectionPlan, write));
+  }
   if (f.write) applySync3(plan, root, vars);
-  console.log(formatSync3Plan(plan, f.write));
+  console.log(formatSync3Plan(plan, write));
   return plan.conflicted.length > 0 ? 1 : 0;
 }
 
@@ -297,6 +345,9 @@ async function bump(args: string[]): Promise<number> {
     console.error("usage: guard bump <tag> [--repo <owner>/<repo>]");
     return 2;
   }
+  // lint 専用フラグを黙って無視しない(誤ったコマンドラインに気づけるように)
+  const lintOnly = rest.find((a) => a === "--format" || a === "--out");
+  if (lintOnly !== undefined) throw new Error(`unknown flag: ${lintOnly}`);
   const f = parseFlags(rest);
   return runBump({
     tag,

@@ -12,6 +12,7 @@ import { rewriteExtendsTag, runBump } from "../src/bump.js";
 import { normalizeMaster, stampFor } from "../src/normalize.js";
 import { parsePolicy } from "../src/schema.js";
 import { loadVars, writeVars, type VarsDocument } from "../src/vars.js";
+import { createGlobScope, globFiles } from "../src/glob.js";
 import { makeFixtureDir, REPO_ROOT, write } from "./helpers.js";
 import { parse } from "yaml";
 
@@ -301,11 +302,28 @@ describe("runBump", () => {
 
 describe("guard new から guard bump までの一連の流れ", () => {
   const PATHS = ["CLAUDE.md", "DESIGN.md", "docs/**/*.md", ".claude/agents/**/*.md"];
-  const PROJECT_VARS: Record<string, string> = {
+  const NAMED: Record<string, string> = {
     PROJECT_NAME: "Acme Portal",
     OWNER: "Novexar",
     "ORG/REPO": "novexar/acme",
   };
+
+  /**
+   * init-project が埋めるはずの vars 一式を、マスターの実ファイルから作る。
+   * 1 つでも欠けると guard bump は 2 で止まる(未確定値の流し込み防止)ので、
+   * 標準にキーが増えてもこのテストが正しい前提のまま動くようにする。
+   */
+  async function varsForMaster(root: string): Promise<Record<string, string>> {
+    const scope = await createGlobScope(root, { gitignore: false });
+    const out: Record<string, string> = { ...NAMED };
+    for (const file of await globFiles(scope, PATHS)) {
+      const raw = readFileSync(join(root, file), "utf8");
+      for (const key of normalizeMaster(raw, { vars: {} }).unresolved) {
+        out[key] ??= `値(${key})`;
+      }
+    }
+    return out;
+  }
 
   it("ローカル file: の新マスターで bump が通り、PJ 値と標準変更が両立する", async () => {
     const parent = fixtureDir("gs-e2e");
@@ -325,6 +343,7 @@ describe("guard new から guard bump までの一連の流れ", () => {
     );
 
     // init-project 相当: マスターを vars で具体化して PJ へ書き戻す
+    const PROJECT_VARS = await varsForMaster(oldRoot);
     for (const file of ["CLAUDE.md", "DESIGN.md"]) {
       const raw = readFileSync(join(oldRoot, file), "utf8");
       writeFileSync(

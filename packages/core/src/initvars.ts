@@ -15,11 +15,8 @@ import { DEFAULT_SECRET_PATTERNS } from "./lint.js";
 import { diffChunks, toLines } from "./merge3.js";
 import { PLACEHOLDER_RE, extractPlaceholderKeys, normalizeMaster, stampFor } from "./normalize.js";
 import { loadPolicyWithMeta, resolveBaseMasters } from "./resolver.js";
-import { readStampTag, VARS_FILENAME, writeVars, type VarsDocument } from "./vars.js";
+import { readStampTag, TODO_VALUE, VARS_FILENAME, writeVars, type VarsDocument } from "./vars.js";
 import type { RemoteOptions } from "./remote.js";
-
-/** 値を決められなかったキーに入れるリテラル。guard bump はこれが残っていると止まる */
-export const TODO_VALUE = "TODO";
 
 export interface InferredVars {
   /** 確定した値(決められなかったキーは TODO_VALUE) */
