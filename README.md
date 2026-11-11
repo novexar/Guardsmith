@@ -87,12 +87,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: novexar/Guardsmith@v0.7.1
+      - uses: novexar/Guardsmith@v0.7.2
 ```
 
 | Input              | Default                   | Description                                                                                                         |
 | ------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `cli-version`      | `0.6.1`                   | npm version of the CLI to run                                                                                       |
+| `cli-version`      | `0.6.2`                   | npm version of the CLI to run                                                                                       |
 | `root` / `policy`  | `.` / `guard.policy.yaml` | Directory / policy file to lint                                                                                     |
 | `upload-sarif`     | `true`                    | Upload SARIF to Code Scanning (set `"false"` on private repos without GHAS; the SARIF is still kept as an artifact) |
 | `pr-comment`       | `true`                    | Post a summary comment when lint fails                                                                              |
@@ -106,7 +106,7 @@ A self-contained bundle (all dependencies included) is attached to every
 Node.js 20+ are required — the npm registry is never contacted:
 
 ```bash
-gh release download v0.7.1 --repo novexar/Guardsmith --pattern 'guardsmith-cli-*.tar.gz'
+gh release download v0.7.2 --repo novexar/Guardsmith --pattern 'guardsmith-cli-*.tar.gz'
 tar -xzf guardsmith-cli-*.tar.gz
 node guardsmith-cli/guard.mjs lint
 ```
@@ -122,9 +122,9 @@ A project policy is a few lines of YAML with pinned remote references:
 version: 1
 target: claude-code
 extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v0.7.1
+  - github:novexar/guardsmith//presets/baseline.yaml@v0.7.2
   # Projects with a frontend also add:
-  # - github:novexar/guardsmith//presets/frontend.yaml@v0.7.1
+  # - github:novexar/guardsmith//presets/frontend.yaml@v0.7.2
 ignore: [] # globs excluded from every scan (concatenated across extends layers)
 rules: [] # add or override rules (redefining an id overrides it)
 exemptions: [] # time-boxed waivers: reason + approved_by + expires required
@@ -146,8 +146,8 @@ exemptions: [] # time-boxed waivers: reason + approved_by + expires required
 A new standards release is taken in with two commands:
 
 ```bash
-guard bump v0.7.1 --dry-run   # dry-run: what the new tag would change, and where it collides
-guard bump v0.7.1             # apply it, and move the extends tags along with it
+guard bump v0.7.2 --dry-run   # dry-run: what the new tag would change, and where it collides
+guard bump v0.7.2             # apply it, and move the extends tags along with it
 ```
 
 The master at the tag the project currently sits on (`standards` in
@@ -175,7 +175,7 @@ dictionary lives at the project root and is **committed**:
 ```yaml
 # guardsmith.vars.yaml
 version: 1
-standards: v0.7.1 # the master tag this project currently sits on
+standards: v0.7.2 # the master tag this project currently sits on
 vars:
   PROJECT_NAME: "BizCore"
   ORG/REPO: "novexar/bizcore"
@@ -201,7 +201,7 @@ without anyone running `sync`:
   severity: warn
   check: drift3
   with:
-    source: github:novexar/guardsmith//standards@v0.7.1 # new master (tag pinning is mandatory)
+    source: github:novexar/guardsmith//standards@v0.7.2 # new master (tag pinning is mandatory)
     paths: ["CLAUDE.md", "DESIGN.md", "docs/**/*.md", ".claude/agents/**/*.md"]
 ```
 
@@ -315,11 +315,12 @@ audit keeps working on projects that keep `.claude/settings.json` local. Use
 
 Existing projects are tag-pinned and keep working untouched. When you are ready to adopt a
 new standards release, follow the step-by-step checklist in
-[docs/migration/v0.7.1.md](docs/migration/v0.7.1.md) — nothing to do on the project side;
-catching up is two commands (`guard bump v0.7.1 --dry-run`, then `guard bump v0.7.1`).
+[docs/migration/v0.7.2.md](docs/migration/v0.7.2.md) — nothing to do on the project side;
+catching up is two commands (`guard bump v0.7.2 --dry-run`, then `guard bump v0.7.2`).
 Coming from an older release? Apply [v0.5.0](docs/migration/v0.5.0.md),
 [v0.5.1](docs/migration/v0.5.1.md), [v0.5.2](docs/migration/v0.5.2.md),
-[v0.6.0](docs/migration/v0.6.0.md) and [v0.7.0](docs/migration/v0.7.0.md) first; every
+[v0.6.0](docs/migration/v0.6.0.md), [v0.7.0](docs/migration/v0.7.0.md) and
+[v0.7.1](docs/migration/v0.7.1.md) first; every
 release's checklist lives in [docs/migration/](docs/migration/).
 
 > **CLI version**: the v0.7.0 baseline needs `@guardsmith/cli` **0.6.0 or newer** (it

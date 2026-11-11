@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.7.2
+- `docs/AGENTS.md` の PM(メインセッション)のモデルを固定バージョンから「Claude Fable(最新版)」へ変更。
+  実行者がその時点で最新の Fable を選択する(バージョン番号はポリシーに固定しない)ことを原則に明記
+- policy / vars の例のタグを `@v0.7.2` へ更新
+
 ## v0.7.1
 - init-project の「マスター更新への追随」を `guard bump <tag> --dry-run` → `guard bump <tag>` に修正。
   `guard sync`(dry-run)は現在のタグでの未適用分の確認であり、bump の予見にはならないことを明記

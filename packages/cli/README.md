@@ -43,8 +43,8 @@ npx @guardsmith/cli init
 npx @guardsmith/cli lint
 
 # Show what a standards update would change, then take it in
-npx @guardsmith/cli bump v0.7.1 --dry-run   # dry-run for the new tag (exit 1 = something conflicts)
-npx @guardsmith/cli bump v0.7.1             # apply + move the extends tags and the vars file
+npx @guardsmith/cli bump v0.7.2 --dry-run   # dry-run for the new tag (exit 1 = something conflicts)
+npx @guardsmith/cli bump v0.7.2             # apply + move the extends tags and the vars file
 
 # Dry-run at the tag the policy currently pins (does not predict a bump)
 npx @guardsmith/cli sync
@@ -114,9 +114,9 @@ is genuinely complete.
 version: 1
 target: claude-code
 extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v0.7.1 # tag pinning is mandatory
+  - github:novexar/guardsmith//presets/baseline.yaml@v0.7.2 # tag pinning is mandatory
   # Projects with a frontend also add:
-  # - github:novexar/guardsmith//presets/frontend.yaml@v0.7.1
+  # - github:novexar/guardsmith//presets/frontend.yaml@v0.7.2
 ignore: [] # globs excluded from every scan (concatenated across extends layers)
 rules: [] # add or override (redefining an id overrides it)
 exemptions: [] # time-boxed waivers: reason + approved_by + expires required
@@ -133,7 +133,7 @@ Add one line to your workflow using the
 [GuardSmith Lint Action](https://github.com/marketplace/actions/guardsmith-lint):
 
 ```yaml
-- uses: novexar/Guardsmith@v0.7.1
+- uses: novexar/Guardsmith@v0.7.2
 ```
 
 Violating PRs fail with a summary comment and a SARIF report. Air-gapped environments can

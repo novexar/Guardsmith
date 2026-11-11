@@ -86,12 +86,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: novexar/Guardsmith@v0.7.1
+      - uses: novexar/Guardsmith@v0.7.2
 ```
 
 | input              | 既定値                    | 説明                                                                                                  |
 | ------------------ | ------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `cli-version`      | `0.6.1`                   | 実行する CLI の npm バージョン                                                                        |
+| `cli-version`      | `0.6.2`                   | 実行する CLI の npm バージョン                                                                        |
 | `root` / `policy`  | `.` / `guard.policy.yaml` | 検査対象 / ポリシーファイル                                                                           |
 | `upload-sarif`     | `true`                    | Code Scanning への SARIF アップロード(GHAS の無い private では `"false"`。SARIF は artifact にも残る) |
 | `pr-comment`       | `true`                    | 失敗時の PR コメント                                                                                  |
@@ -104,7 +104,7 @@ jobs:
 添付しています。必要なのは GitHub への到達と Node.js 20+ のみで、npm レジストリには一切接続しません:
 
 ```bash
-gh release download v0.7.1 --repo novexar/Guardsmith --pattern 'guardsmith-cli-*.tar.gz'
+gh release download v0.7.2 --repo novexar/Guardsmith --pattern 'guardsmith-cli-*.tar.gz'
 tar -xzf guardsmith-cli-*.tar.gz
 node guardsmith-cli/guard.mjs lint
 ```
@@ -120,9 +120,9 @@ node guardsmith-cli/guard.mjs lint
 version: 1
 target: claude-code
 extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v0.7.1
+  - github:novexar/guardsmith//presets/baseline.yaml@v0.7.2
   # フロントエンドを持つプロジェクトはさらに:
-  # - github:novexar/guardsmith//presets/frontend.yaml@v0.7.1
+  # - github:novexar/guardsmith//presets/frontend.yaml@v0.7.2
 ignore: [] # 全走査から除外する glob(extends 間で連結される)
 rules: [] # 追加・上書き(同じ id の再定義=上書き)
 exemptions: [] # 期限付き例外(reason + approved_by + expires 必須)
@@ -144,8 +144,8 @@ exemptions: [] # 期限付き例外(reason + approved_by + expires 必須)
 新しい標準リリースは 2 コマンドで取り込みます:
 
 ```bash
-guard bump v0.7.1 --dry-run   # dry-run。新タグで何が変わり、どこがぶつかるかを表示
-guard bump v0.7.1             # 適用。extends タグも一緒に進める
+guard bump v0.7.2 --dry-run   # dry-run。新タグで何が変わり、どこがぶつかるかを表示
+guard bump v0.7.2             # 適用。extends タグも一緒に進める
 ```
 
 PJ が現在乗っているタグのマスター(`guardsmith.vars.yaml` の `standards`)と新タグのマスターを
@@ -172,7 +172,7 @@ PJ が現在乗っているタグのマスター(`guardsmith.vars.yaml` の `sta
 ```yaml
 # guardsmith.vars.yaml
 version: 1
-standards: v0.7.1 # この PJ が現在乗っているマスタータグ
+standards: v0.7.2 # この PJ が現在乗っているマスタータグ
 vars:
   PROJECT_NAME: "BizCore"
   ORG/REPO: "novexar/bizcore"
@@ -196,7 +196,7 @@ v0.7.0 より前に作った PJ は `guard sync --init-vars` で生成します�
   severity: warn
   check: drift3
   with:
-    source: github:novexar/guardsmith//standards@v0.7.1 # 新マスター(タグ固定は必須)
+    source: github:novexar/guardsmith//standards@v0.7.2 # 新マスター(タグ固定は必須)
     paths: ["CLAUDE.md", "DESIGN.md", "docs/**/*.md", ".claude/agents/**/*.md"]
 ```
 
@@ -304,11 +304,12 @@ v0.7.0 より前に作った PJ は `guard sync --init-vars` で生成します�
 ## 標準のアップグレード
 
 既存プロジェクトはタグ固定のため、何もしなくても壊れません。新しい標準リリースへ追随する
-際は [docs/migration/v0.7.1.ja.md](docs/migration/v0.7.1.ja.md) のチェックリストに従ってください
-——PJ 側の作業は無く、追随は 2 コマンド(`guard bump v0.7.1 --dry-run` → `guard bump v0.7.1`)です。
+際は [docs/migration/v0.7.2.ja.md](docs/migration/v0.7.2.ja.md) のチェックリストに従ってください
+——PJ 側の作業は無く、追随は 2 コマンド(`guard bump v0.7.2 --dry-run` → `guard bump v0.7.2`)です。
 それより古い版からの移行は [v0.5.0](docs/migration/v0.5.0.ja.md)・
 [v0.5.1](docs/migration/v0.5.1.ja.md)・[v0.5.2](docs/migration/v0.5.2.ja.md)・
-[v0.6.0](docs/migration/v0.6.0.ja.md)・[v0.7.0](docs/migration/v0.7.0.ja.md) を先に適用してください。
+[v0.6.0](docs/migration/v0.6.0.ja.md)・[v0.7.0](docs/migration/v0.7.0.ja.md)・
+[v0.7.1](docs/migration/v0.7.1.ja.md) を先に適用してください。
 各リリースのチェックリストは [docs/migration/](docs/migration/) にあります。
 
 > **CLI のバージョン**: v0.7.0 の baseline は `@guardsmith/cli` **0.6.0 以上**が必要です
