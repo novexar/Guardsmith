@@ -2,6 +2,23 @@
 
 [English](CHANGELOG.md) | **日本語**
 
+## v0.7.2 (2026-11-11)
+
+標準の文言を直すリリース。Agent モデルポリシーが PM(メインセッション)のモデルを特定の
+バージョンで記載していたため、モデルのリリースのたびに文書が古くなっていた。
+「Claude Fable の最新版」という表現に改め、バージョン番号を書かないようにした。
+CLI の挙動に変更は無い。
+
+### Changed
+
+- 標準の `docs/AGENTS.md`: PM(メインセッション)のモデルを固定バージョンから
+  「Claude Fable(最新版)」へ変更。原則にも、実行者が `/model` 等でその時点で最新の Fable を
+  選択すること(バージョン番号はポリシーに固定しない)を明記
+- リモート参照タグと生成物のスタンプを v0.7.2 へ更新(baseline の drift source /
+  `guard new` が生成する policy / docs の例 / Action の `release-tag` 既定値)
+- npm: `@guardsmith/core` / `@guardsmith/cli` 0.6.2(Action の `cli-version` 既定値も 0.6.2)。
+  0.6.1 との差は同梱する標準と、`guard new` が刻む v0.7.2 のタグのみ
+
 ## v0.7.1 (2026-09-25)
 
 文書と実装のずれを直すリリース。v0.7.0 の移行ガイドと `init-project` はどちらも

@@ -42,7 +42,7 @@ description: マスターテンプレートからコピーされた本リポジ�
 
 ```yaml
 version: 1
-standards: v0.7.1 # 展開元のマスタータグ。CLAUDE.md 末尾スタンプと一致させる
+standards: v0.7.2 # 展開元のマスタータグ。CLAUDE.md 末尾スタンプと一致させる
 vars:
   PROJECT_NAME: "BizCore"
   OWNER: "Novexar"
@@ -77,7 +77,7 @@ vars:
       - github:novexar/guardsmith//presets/frontend.yaml@vX.Y.Z # ← FE を持つ PJ のみ追加
     ```
 
-    - リモート参照はタグ固定(`@vX.Y.Z`)必須。実例: `github:novexar/guardsmith//presets/frontend.yaml@v0.7.1`
+    - リモート参照はタグ固定(`@vX.Y.Z`)必須。実例: `github:novexar/guardsmith//presets/frontend.yaml@v0.7.2`
     - ローカル開発(guardsmith リポジトリ内や CLI 同梱プリセット)では `preset:frontend` と書ける。
     - 検査内容: `DESIGN.md` の存在(`frontend/design-md`)/ shadcn 設定 `components.json` の存在
       (`frontend/shadcn-config`)/ 競合 UI ライブラリ不在(`frontend/no-competing-ui-libs`)/
@@ -112,8 +112,8 @@ vars:
 適用するため、**PJ 固有の記述は上書きされない**。
 
 ```
-guard bump v0.7.1 --dry-run   # dry-run。新タグでの差分と衝突予測を表示する(何も書かない)
-guard bump v0.7.1             # 取り込み。policy の extends タグと vars の standards も更新する
+guard bump v0.7.2 --dry-run   # dry-run。新タグでの差分と衝突予測を表示する(何も書かない)
+guard bump v0.7.2             # 取り込み。policy の extends タグと vars の standards も更新する
 ```
 
 `--write` なしの `guard sync` も dry-run だが、基準は policy が **現在** 固定しているタグなので、
