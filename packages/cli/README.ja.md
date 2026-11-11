@@ -43,8 +43,8 @@ npx @guardsmith/cli init
 npx @guardsmith/cli lint
 
 # 標準更新で何が変わるかを表示し、取り込む
-npx @guardsmith/cli bump v0.7.1 --dry-run   # 新タグでの dry-run(衝突があれば exit 1)
-npx @guardsmith/cli bump v0.7.1             # 適用 + extends タグと vars ファイルの更新
+npx @guardsmith/cli bump v0.7.2 --dry-run   # 新タグでの dry-run(衝突があれば exit 1)
+npx @guardsmith/cli bump v0.7.2             # 適用 + extends タグと vars ファイルの更新
 
 # 現在固定しているタグでの未適用分の確認(bump の予見にはならない)
 npx @guardsmith/cli sync
@@ -111,9 +111,9 @@ npx @guardsmith/cli version
 version: 1
 target: claude-code
 extends:
-  - github:novexar/guardsmith//presets/baseline.yaml@v0.7.1 # タグ固定は必須
+  - github:novexar/guardsmith//presets/baseline.yaml@v0.7.2 # タグ固定は必須
   # フロントエンドを持つプロジェクトはさらに:
-  # - github:novexar/guardsmith//presets/frontend.yaml@v0.7.1
+  # - github:novexar/guardsmith//presets/frontend.yaml@v0.7.2
 ignore: [] # 全走査から除外する glob(extends 間で連結される)
 rules: [] # 追加・上書き(同じ id の再定義=上書き)
 exemptions: [] # 期限付き例外(reason + approved_by + expires 必須)
@@ -130,7 +130,7 @@ GitHub の外に出ることはありません。期限切れの例外(exemption
 workflow に 1 行追加:
 
 ```yaml
-- uses: novexar/Guardsmith@v0.7.1
+- uses: novexar/Guardsmith@v0.7.2
 ```
 
 違反した PR はサマリコメントと SARIF レポート付きで失敗します。閉域網などの環境では
